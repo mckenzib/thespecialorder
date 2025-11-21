@@ -119,3 +119,25 @@ const LEVEL_BOSS = [
 ];
 
 export const LEVELS = [LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_BOSS];
+
+export const CHEF_QUOTES_VICTORY = [
+  "Finally, some decent food. Don't get cocky.",
+  "Acceptable. Just barely.",
+  "The plating was messy, but the flavor is there.",
+  "You didn't ruin it. Incredible.",
+  "I've seen worse from a line cook. Good job.",
+  "Surprisingly adequate.",
+  "It's raw! Oh wait, no, it's actually perfect. My mistake.",
+  "Delicious. Finally, some good food."
+];
+
+export const CHEF_QUOTES_FAILURE = [
+  "You call that cooking? You're just falling off ledges!",
+  "My gran could jump better than that, and she's a ghost!",
+  "Defeated by {{cause}}? You are an idiot sandwich!",
+  "Get out! You're a disgrace to the uniform!",
+  "Overcooked and underwhelming. Just like your jumping.",
+  "Focus! You're letting the ingredients win!",
+  "Pathetic. Absolutely pathetic. Killed by {{cause}}.",
+  "Where is the lamb sauce?! You have nothing!"
+];

@@ -25,6 +25,6 @@ export const getChefCommentary = async (won: boolean, score: number, causeOfDeat
     return response.text || (won ? "Not bad, for a dishwasher." : "Get out of my kitchen!");
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "The Chef is silently judging you. (Check API Key)";
+    return "The Chef is silently judging you.";
   }
 };

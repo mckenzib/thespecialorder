@@ -33,7 +33,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     status: status,
     levelIndex: levelIndex,
     bossDefeated: false,
-    skyColor: COLORS.sky
+    skyColor: COLORS.sky,
+    scale: 1
   });
 
   // Sync props to ref
@@ -213,6 +214,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     const currentAccel = isRunning ? RUN_SPEED : WALK_SPEED;
     const currentMaxSpeed = isRunning ? RUN_MAX_SPEED : WALK_MAX_SPEED;
 
+    // Calculate Dynamic Scale to Fit Height
+    // We want to fit approx 16 tiles vertically (15 tiles level + 1 tile buffer)
+    const desiredVisibleRows = 16;
+    const scaleY = window.innerHeight / (desiredVisibleRows * TILE_SIZE);
+    // Clamp scale to reasonable values (e.g. don't get too small on very wide/short screens)
+    // But prioritize fitting height.
+    const scale = Math.max(0.4, Math.min(2.5, scaleY));
+    gameState.current.scale = scale;
+
     // --- Player Physics ---
     if (keys['ArrowRight'] || keys['KeyD']) {
       player.vel.x += currentAccel;
@@ -255,7 +265,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
       }
     }
 
-    if (player.pos.y > 1500) {
+    if (player.pos.y > 2000) { // Increased death plane for safety
        onGameOver("Fell into the abyss");
        return;
     }
@@ -422,10 +432,31 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     gameState.current.entities = entities.filter(e => !e.isDead);
     setScore(gameState.current.score);
 
-    // Camera
-    const targetCamX = player.pos.x - 300;
+    // --- Camera Logic ---
+    // Calculate view dimensions in WORLD units
+    const viewWidth = window.innerWidth / scale;
+    const viewHeight = window.innerHeight / scale;
+
+    // X: Track player, keeping them roughly in the left 30-40%
+    const targetCamX = player.pos.x - viewWidth * 0.35;
     gameState.current.camera.x += (targetCamX - gameState.current.camera.x) * 0.1;
     gameState.current.camera.x = Math.max(0, gameState.current.camera.x);
+    
+    // Y: Center the level vertically if possible, or clamp
+    // The level is generally 15 tiles high. 
+    const levelPixelHeight = 15 * TILE_SIZE;
+    
+    if (viewHeight >= levelPixelHeight) {
+        // Screen is taller than level, center the level
+        const centeredY = (levelPixelHeight - viewHeight) / 2;
+        gameState.current.camera.y = centeredY;
+    } else {
+        // Screen is shorter than level (rare with our scale logic, but possible if clamped)
+        // Basic clamping to keep player on screen + buffer
+        const targetCamY = player.pos.y - viewHeight * 0.5;
+        gameState.current.camera.y += (targetCamY - gameState.current.camera.y) * 0.1;
+    }
+
     
     // Particles
     for (let i = gameState.current.particles.length - 1; i >= 0; i--) {
@@ -450,21 +481,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
         canvas.height = window.innerHeight;
     }
 
-    const { player, entities, particles, camera, frameCount, skyColor } = gameState.current;
+    const { player, entities, particles, camera, frameCount, skyColor, scale } = gameState.current;
 
     // Background
     ctx.fillStyle = skyColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
+    
+    // APPLY SCALE
+    ctx.scale(scale, scale);
+    
+    // APPLY CAMERA TRANSLATION
     ctx.translate(-camera.x, -camera.y);
 
-    // Grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 1;
-    for(let x = 0; x < canvas.width + camera.x + 1000; x+= TILE_SIZE) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 2000); ctx.stroke();
-    }
+    // Grid (Visual reference)
+    // ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    // ctx.lineWidth = 1;
+    // for(let x = 0; x < (canvas.width / scale) + camera.x + 1000; x+= TILE_SIZE) {
+    //     ctx.beginPath(); ctx.moveTo(x, -500); ctx.lineTo(x, 2000); ctx.stroke();
+    // }
 
     // Entities
     entities.forEach(entity => {
