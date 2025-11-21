@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Entity, EntityType, Vector, GameStatus } from '../types';
 import { 
   GRAVITY, FRICTION, TILE_SIZE, EMOJIS, COLORS, TERMINAL_VELOCITY, LEVELS, BOSS_HEALTH,
@@ -33,6 +33,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     status: status,
     levelIndex: levelIndex,
     bossDefeated: false,
+    levelComplete: false,
+    levelCompleteTimer: 0,
     skyColor: COLORS.sky,
     scale: 1
   });
@@ -57,10 +59,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     const currentLevelLayout = LEVELS[currentIndex] || LEVELS[0];
 
     // Dynamic Sky Color based on level
-    const skyColors = ['#87CEEB', '#FFDAB9', '#2F4F4F', '#300000']; // Blue, Peach (Sunset), Dark Slate (Cave/Night), Dark Red (Boss)
+    const skyColors = ['#87CEEB', '#FFDAB9', '#2F4F4F', '#300000']; 
     gameState.current.skyColor = skyColors[currentIndex % skyColors.length];
 
     gameState.current.bossDefeated = false;
+    gameState.current.levelComplete = false;
+    gameState.current.levelCompleteTimer = 0;
 
     currentLevelLayout.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
@@ -112,8 +116,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
       }
     });
 
-    // Keep existing score/sauce if progressing levels, but reset if restarting L1
-    if (currentIndex === 0) {
+    // Reset score only on first level start
+    if (currentIndex === 0 && status === GameStatus.PLAYING) {
        gameState.current.score = 0;
        gameState.current.hasSauce = false;
        setScore(0);
@@ -131,6 +135,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     const handleKeyDown = (e: KeyboardEvent) => {
       gameState.current.keys[e.code] = true;
       
+      if (gameState.current.levelComplete) return;
+
       const isRunning = gameState.current.keys['ShiftLeft'] || gameState.current.keys['ShiftRight'] || gameState.current.keys['KeyZ'];
 
       // Jump logic
@@ -170,445 +176,552 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     const projectile: Entity = {
       id: `proj-${Date.now()}`,
       type: EntityType.PROJECTILE,
-      pos: { x: player.pos.x + (player.size.x / 2) + (dir * 20), y: player.pos.y + player.size.y / 2 },
+      pos: { x: player.pos.x + (player.size.x / 2) + (dir * 20), y: player.pos.y + player.size.y / 4 },
       size: { x: 20, y: 10 },
       vel: { x: dir * 12, y: 0 },
       color: 'red',
       emoji: '🔥',
-      lifetime: 60 
+      lifetime: 60
     };
     gameState.current.entities.push(projectile);
   };
 
-  const createParticles = (pos: Vector, count: number, color: string, emoji?: string) => {
+  const createParticles = (pos: Vector, count: number, color: string) => {
     for (let i = 0; i < count; i++) {
       gameState.current.particles.push({
         id: `p-${Math.random()}`,
         type: EntityType.PARTICLE,
-        pos: { x: pos.x + Math.random() * 20, y: pos.y + Math.random() * 20 },
-        size: { x: 5 + Math.random() * 5, y: 5 + Math.random() * 5 },
+        pos: { ...pos },
         vel: { x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 },
+        size: { x: 4, y: 4 },
         color: color,
-        emoji: emoji,
         lifetime: 30 + Math.random() * 20
       });
     }
   };
 
-  const checkCollision = (r1: Entity, r2: Entity): boolean => {
-    return (
-      r1.pos.x < r2.pos.x + r2.size.x &&
-      r1.pos.x + r1.size.x > r2.pos.x &&
-      r1.pos.y < r2.pos.y + r2.size.y &&
-      r1.pos.y + r1.size.y > r2.pos.y
-    );
+  const createConfetti = (pos: Vector) => {
+      const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'];
+      for (let i = 0; i < 50; i++) {
+        gameState.current.particles.push({
+            id: `confetti-${Math.random()}`,
+            type: EntityType.PARTICLE,
+            pos: { x: pos.x + (Math.random() - 0.5) * 50, y: pos.y + (Math.random() - 0.5) * 50 },
+            vel: { x: (Math.random() - 0.5) * 15, y: (Math.random() - 1) * 15 },
+            size: { x: 6, y: 6 },
+            color: colors[Math.floor(Math.random() * colors.length)],
+            lifetime: 120
+        });
+      }
   };
 
-  // Main Game Loop
-  const update = useCallback(() => {
-    if (gameState.current.status !== GameStatus.PLAYING || !gameState.current.player) return;
-
-    const { player, entities, keys } = gameState.current;
-    
-    const isRunning = keys['ShiftLeft'] || keys['ShiftRight'] || keys['KeyZ'];
-    const currentAccel = isRunning ? RUN_SPEED : WALK_SPEED;
-    const currentMaxSpeed = isRunning ? RUN_MAX_SPEED : WALK_MAX_SPEED;
-
-    // Calculate Dynamic Scale to Fit Height
-    // We want to fit approx 16 tiles vertically (15 tiles level + 1 tile buffer)
-    const desiredVisibleRows = 16;
-    const scaleY = window.innerHeight / (desiredVisibleRows * TILE_SIZE);
-    // Clamp scale to reasonable values (e.g. don't get too small on very wide/short screens)
-    // But prioritize fitting height.
-    const scale = Math.max(0.4, Math.min(2.5, scaleY));
-    gameState.current.scale = scale;
-
-    // --- Player Physics ---
-    if (keys['ArrowRight'] || keys['KeyD']) {
-      player.vel.x += currentAccel;
-      player.facingRight = true;
-    } else if (keys['ArrowLeft'] || keys['KeyA']) {
-      player.vel.x -= currentAccel;
-      player.facingRight = false;
-    } else {
-      player.vel.x *= FRICTION;
-    }
-
-    player.vel.x = Math.max(Math.min(player.vel.x, currentMaxSpeed), -currentMaxSpeed);
-    player.vel.y += GRAVITY;
-    player.vel.y = Math.min(player.vel.y, TERMINAL_VELOCITY);
-    player.pos.x += player.vel.x;
-
-    // Platforms X
-    for (const entity of entities) {
-      if (entity.type === EntityType.PLATFORM && checkCollision(player, entity)) {
-        if (player.vel.x > 0) player.pos.x = entity.pos.x - player.size.x;
-        else if (player.vel.x < 0) player.pos.x = entity.pos.x + entity.size.x;
-        player.vel.x = 0;
-      }
-    }
-
-    player.pos.y += player.vel.y;
-    player.grounded = false;
-
-    // Platforms Y
-    for (const entity of entities) {
-      if (entity.type === EntityType.PLATFORM && checkCollision(player, entity)) {
-        if (player.vel.y > 0) {
-          player.pos.y = entity.pos.y - player.size.y;
-          player.grounded = true;
-          player.vel.y = 0;
-        } else if (player.vel.y < 0) {
-          player.pos.y = entity.pos.y + entity.size.y;
-          player.vel.y = 0;
-        }
-      }
-    }
-
-    if (player.pos.y > 2000) { // Increased death plane for safety
-       onGameOver("Fell into the abyss");
-       return;
-    }
-
-    // Invulnerability tick
-    if (player.invulnerable && player.invulnerable > 0) {
-        player.invulnerable--;
-    }
-
-    // --- Entity Interactions ---
-    for (let i = entities.length - 1; i >= 0; i--) {
-      const entity = entities[i];
-      if (entity.isDead) continue;
-
-      // Enemy Movement
-      if (entity.type === EntityType.ENEMY_ONION) {
-        entity.pos.x += entity.vel.x;
-        if (gameState.current.frameCount % 150 === 0) entity.vel.x *= -1;
-      }
-      
-      // Boss Logic
-      if (entity.type === EntityType.ENEMY_BOSS) {
-          // Move towards player slowly
-          const dx = player.pos.x - entity.pos.x;
-          if (Math.abs(dx) > 10) {
-              entity.vel.x = dx > 0 ? 1.5 : -1.5;
-          }
-          entity.pos.x += entity.vel.x;
-          
-          // Boss Jump
-          if (entity.grounded && Math.random() < 0.01) {
-              entity.vel.y = -15;
-              entity.grounded = false;
-          }
-          entity.vel.y += GRAVITY;
-          entity.pos.y += entity.vel.y;
-
-          // Boss Platform Collision
-          entity.grounded = false;
-          for (const p of entities) {
-              if (p.type === EntityType.PLATFORM && checkCollision(entity, p)) {
-                  if (entity.vel.y > 0) {
-                      entity.pos.y = p.pos.y - entity.size.y;
-                      entity.vel.y = 0;
-                      entity.grounded = true;
-                  }
-              }
-          }
-      }
-
-      if (entity.type === EntityType.ENEMY_SALT) {
-         if (gameState.current.frameCount % 120 === 0 && Math.random() > 0.5) {
-            entity.vel.y = -8;
-         }
-         entity.vel.y += GRAVITY;
-         entity.pos.y += entity.vel.y;
-         for(const plat of entities) {
-            if(plat.type === EntityType.PLATFORM && checkCollision(entity, plat)) {
-                if(entity.vel.y > 0) {
-                    entity.pos.y = plat.pos.y - entity.size.y;
-                    entity.vel.y = 0;
-                }
-            }
-         }
-      }
-
-      // Player vs Entity
-      if (checkCollision(player, entity)) {
-        if (entity.type === EntityType.ITEM_TACO) {
-          entity.isDead = true;
-          createParticles(entity.pos, 20, 'yellow', '🌮');
-          onLevelComplete();
-          return;
-        } else if (entity.type === EntityType.POWERUP_SAUCE) {
-          entity.isDead = true;
-          gameState.current.hasSauce = true;
-          setHasSauce(true);
-          createParticles(entity.pos, 10, 'red', '🌶️');
-          gameState.current.score += 100;
-          setScore(gameState.current.score);
-        } else if ([EntityType.ENEMY_ONION, EntityType.ENEMY_CILANTRO, EntityType.ENEMY_SALT].includes(entity.type)) {
-            const hitFromAbove = player.vel.y > 0 && player.pos.y + player.size.y - player.vel.y <= entity.pos.y + entity.size.y * 0.5;
-            if (hitFromAbove) {
-                entity.isDead = true;
-                player.vel.y = WALK_JUMP_FORCE * 0.6;
-                createParticles(entity.pos, 8, entity.color, '💨');
-                gameState.current.score += 200;
-                setScore(gameState.current.score);
-            } else if (!player.invulnerable) {
-                createParticles(player.pos, 10, 'red', '💢');
-                onGameOver(`Touched a raw ${entity.emoji}`);
-                return;
-            }
-        } else if (entity.type === EntityType.ENEMY_BOSS) {
-            const hitFromAbove = player.vel.y > 0 && player.pos.y + player.size.y - player.vel.y <= entity.pos.y + entity.size.y * 0.3; // Higher hitbox
-            
-            if (hitFromAbove && !player.invulnerable) {
-                // Damage Boss
-                entity.health = (entity.health || 0) - 1;
-                player.vel.y = -15; // Big bounce
-                player.invulnerable = 30;
-                createParticles(entity.pos, 15, 'orange', '💥');
-                
-                if ((entity.health || 0) <= 0) {
-                    entity.isDead = true;
-                    gameState.current.bossDefeated = true;
-                    createParticles(entity.pos, 50, 'purple', '🧅');
-                    gameState.current.score += 5000;
-                    // Spawn Taco
-                    gameState.current.entities.push({
-                         id: 'victory-taco', type: EntityType.ITEM_TACO, 
-                         pos: { x: entity.pos.x, y: entity.pos.y - 100 }, 
-                         size: { x: TILE_SIZE, y: TILE_SIZE },
-                         vel: { x: 0, y: 0 }, color: 'yellow', emoji: EMOJIS.taco
-                    });
-                }
-            } else if (!player.invulnerable) {
-                createParticles(player.pos, 10, 'red', '💢');
-                onGameOver("Crushed by the Giant Onion");
-                return;
-            }
-        }
-      }
-
-      // Projectiles
-      if (entity.type === EntityType.PROJECTILE) {
-        entity.pos.x += entity.vel.x;
-        entity.lifetime = (entity.lifetime || 0) - 1;
-        if ((entity.lifetime || 0) <= 0) entity.isDead = true;
-
-        for (const target of entities) {
-            if (target === entity) continue;
-            if (checkCollision(entity, target)) {
-                 if ([EntityType.ENEMY_ONION, EntityType.ENEMY_CILANTRO, EntityType.ENEMY_SALT].includes(target.type) && !target.isDead) {
-                    target.isDead = true;
-                    entity.isDead = true;
-                    createParticles(target.pos, 10, target.color, '💥');
-                    gameState.current.score += 150;
-                 } else if (target.type === EntityType.ENEMY_BOSS && !target.isDead) {
-                     entity.isDead = true;
-                     target.health = (target.health || 0) - 1;
-                     createParticles(entity.pos, 5, 'orange');
-                     if ((target.health || 0) <= 0) {
-                        target.isDead = true;
-                        gameState.current.bossDefeated = true;
-                        createParticles(target.pos, 50, 'purple', '🧅');
-                        gameState.current.score += 5000;
-                        gameState.current.entities.push({
-                             id: 'victory-taco', type: EntityType.ITEM_TACO, 
-                             pos: { x: target.pos.x, y: target.pos.y - 100 }, 
-                             size: { x: TILE_SIZE, y: TILE_SIZE },
-                             vel: { x: 0, y: 0 }, color: 'yellow', emoji: EMOJIS.taco
-                        });
-                     }
-                 } else if (target.type === EntityType.PLATFORM) {
-                    entity.isDead = true;
-                    createParticles(entity.pos, 3, 'gray');
-                 }
-            }
-        }
-      }
-    }
-
-    gameState.current.entities = entities.filter(e => !e.isDead);
-    setScore(gameState.current.score);
-
-    // --- Camera Logic ---
-    // Calculate view dimensions in WORLD units
-    const viewWidth = window.innerWidth / scale;
-    const viewHeight = window.innerHeight / scale;
-
-    // X: Track player, keeping them roughly in the left 30-40%
-    const targetCamX = player.pos.x - viewWidth * 0.35;
-    gameState.current.camera.x += (targetCamX - gameState.current.camera.x) * 0.1;
-    gameState.current.camera.x = Math.max(0, gameState.current.camera.x);
-    
-    // Y: Center the level vertically if possible, or clamp
-    // The level is generally 15 tiles high. 
-    const levelPixelHeight = 15 * TILE_SIZE;
-    
-    if (viewHeight >= levelPixelHeight) {
-        // Screen is taller than level, center the level
-        const centeredY = (levelPixelHeight - viewHeight) / 2;
-        gameState.current.camera.y = centeredY;
-    } else {
-        // Screen is shorter than level (rare with our scale logic, but possible if clamped)
-        // Basic clamping to keep player on screen + buffer
-        const targetCamY = player.pos.y - viewHeight * 0.5;
-        gameState.current.camera.y += (targetCamY - gameState.current.camera.y) * 0.1;
-    }
-
-    
-    // Particles
-    for (let i = gameState.current.particles.length - 1; i >= 0; i--) {
-        const p = gameState.current.particles[i];
-        p.pos.x += p.vel.x;
-        p.pos.y += p.vel.y;
-        p.lifetime = (p.lifetime || 0) - 1;
-        if ((p.lifetime || 0) <= 0) gameState.current.particles.splice(i, 1);
-    }
-
-    gameState.current.frameCount++;
-  }, [onGameOver, onLevelComplete, setScore, setHasSauce]);
-
-  const draw = useCallback(() => {
+  // Game Loop
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
+    let animationFrameId: number;
 
-    const { player, entities, particles, camera, frameCount, skyColor, scale } = gameState.current;
+    const update = () => {
+      if (gameState.current.status !== GameStatus.PLAYING) return;
+      
+      // --- Scaling Logic ---
+      const visibleTilesHeight = 16; // Aim to show 16 tiles vertically
+      const scale = window.innerHeight / (visibleTilesHeight * TILE_SIZE);
+      gameState.current.scale = scale;
 
-    // Background
-    ctx.fillStyle = skyColor;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // --- Level Complete Celebration Logic ---
+      if (gameState.current.levelComplete) {
+          gameState.current.levelCompleteTimer++;
+          
+          // Victory Hop
+          const { player } = gameState.current;
+          if (player && player.grounded && gameState.current.levelCompleteTimer % 40 === 0) {
+               player.vel.y = -10;
+               player.grounded = false;
+          }
+          if (player) {
+             player.vel.y += GRAVITY;
+             player.pos.y += player.vel.y;
+             // Simple floor collision for victory hop
+             gameState.current.entities.forEach(entity => {
+                 if (entity.type === EntityType.PLATFORM && 
+                     player.pos.x < entity.pos.x + entity.size.x &&
+                     player.pos.x + player.size.x > entity.pos.x &&
+                     player.pos.y + player.size.y <= entity.pos.y + entity.vel.y + 5 && // Tolerance
+                     player.pos.y + player.size.y + player.vel.y >= entity.pos.y) {
+                     player.vel.y = 0;
+                     player.pos.y = entity.pos.y - player.size.y;
+                     player.grounded = true;
+                 }
+             });
+          }
 
-    ctx.save();
-    
-    // APPLY SCALE
-    ctx.scale(scale, scale);
-    
-    // APPLY CAMERA TRANSLATION
-    ctx.translate(-camera.x, -camera.y);
+          // Update particles
+          gameState.current.particles.forEach(p => {
+              p.pos.x += p.vel.x;
+              p.pos.y += p.vel.y;
+              p.vel.y += 0.2;
+              if (p.lifetime) p.lifetime--;
+          });
+          gameState.current.particles = gameState.current.particles.filter(p => (p.lifetime || 0) > 0);
 
-    // Grid (Visual reference)
-    // ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    // ctx.lineWidth = 1;
-    // for(let x = 0; x < (canvas.width / scale) + camera.x + 1000; x+= TILE_SIZE) {
-    //     ctx.beginPath(); ctx.moveTo(x, -500); ctx.lineTo(x, 2000); ctx.stroke();
-    // }
+          // Longer celebration for boss level (5s) vs normal level (2s)
+          const isFinalLevel = gameState.current.levelIndex === LEVELS.length - 1;
+          const maxTime = isFinalLevel ? 300 : 120;
 
-    // Entities
-    entities.forEach(entity => {
-      if (entity.type === EntityType.ENEMY_BOSS) {
-         ctx.save();
-         // Boss Flash effect if low health
-         if ((entity.health || 0) < 2 && frameCount % 10 < 5) {
-             ctx.globalAlpha = 0.5;
-         }
-         ctx.font = `${entity.size.x}px Arial`;
-         ctx.fillText(entity.emoji || '👹', entity.pos.x, entity.pos.y);
-         
-         // Boss Health Bar
-         ctx.fillStyle = 'red';
-         ctx.fillRect(entity.pos.x, entity.pos.y - 20, entity.size.x, 10);
-         ctx.fillStyle = 'green';
-         ctx.fillRect(entity.pos.x, entity.pos.y - 20, entity.size.x * ((entity.health || 0) / BOSS_HEALTH), 10);
-         
-         ctx.restore();
-      } else if (entity.emoji) {
-        ctx.font = `${entity.size.x}px Arial`;
-        ctx.fillText(entity.emoji, entity.pos.x, entity.pos.y);
-      } else {
-        ctx.fillStyle = entity.color;
-        ctx.fillRect(entity.pos.x, entity.pos.y, entity.size.x, entity.size.y);
+          if (gameState.current.levelCompleteTimer > maxTime) {
+               onLevelComplete();
+          }
+          
+          draw(ctx, canvas);
+          animationFrameId = requestAnimationFrame(update);
+          return;
       }
-    });
 
-    // Draw Player with Legs
-    if (player) {
-        ctx.save();
-        const centerX = player.pos.x + player.size.x / 2;
-        const centerY = player.pos.y + player.size.y / 2;
-        
-        ctx.translate(centerX, centerY);
-        if (!player.facingRight) ctx.scale(-1, 1);
-        
-        // Leg Animation
-        const legLength = 15;
-        const isMoving = Math.abs(player.vel.x) > 0.1;
-        let leftLegAngle = 0;
-        let rightLegAngle = 0;
+      const { player } = gameState.current;
+      if (!player) return;
 
-        if (!player.grounded) {
-            // Jump pose
-            leftLegAngle = -0.5;
-            rightLegAngle = 0.5;
-        } else if (isMoving) {
-            // Run cycle
-            const speed = Math.abs(player.vel.x) * 0.3;
-            leftLegAngle = Math.sin(frameCount * speed) * 0.8;
-            rightLegAngle = Math.sin(frameCount * speed + Math.PI) * 0.8;
+      gameState.current.frameCount++;
+
+      // --- Player Movement ---
+      const isRunning = gameState.current.keys['ShiftLeft'] || gameState.current.keys['ShiftRight'] || gameState.current.keys['KeyZ'];
+      const acceleration = isRunning ? RUN_SPEED : WALK_SPEED;
+      const maxSpeed = isRunning ? RUN_MAX_SPEED : WALK_MAX_SPEED;
+
+      if (gameState.current.keys['ArrowLeft'] || gameState.current.keys['KeyA']) {
+        player.vel.x -= acceleration;
+        player.facingRight = false;
+      }
+      if (gameState.current.keys['ArrowRight'] || gameState.current.keys['KeyD']) {
+        player.vel.x += acceleration;
+        player.facingRight = true;
+      }
+
+      player.vel.x *= FRICTION;
+      player.vel.y += GRAVITY;
+
+      player.vel.x = Math.max(Math.min(player.vel.x, maxSpeed), -maxSpeed);
+      player.vel.y = Math.min(player.vel.y, TERMINAL_VELOCITY);
+
+      player.pos.x += player.vel.x;
+      player.pos.y += player.vel.y;
+      
+      // Check abyss
+      if (player.pos.y > (LEVELS[0].length + 5) * TILE_SIZE) {
+          onGameOver("Falling into the abyss");
+          return;
+      }
+
+      // --- Collision Detection ---
+      player.grounded = false;
+
+      // Platform Collision
+      gameState.current.entities.forEach(entity => {
+        if (entity.type === EntityType.PLATFORM) {
+          // AABB Collision
+          if (
+            player.pos.x < entity.pos.x + entity.size.x &&
+            player.pos.x + player.size.x > entity.pos.x &&
+            player.pos.y < entity.pos.y + entity.size.y &&
+            player.pos.y + player.size.y > entity.pos.y
+          ) {
+            // Simple resolution: push out based on velocity
+            const prevY = player.pos.y - player.vel.y;
+            
+            // Landing on top
+            if (prevY + player.size.y <= entity.pos.y) {
+              player.pos.y = entity.pos.y - player.size.y;
+              player.vel.y = 0;
+              player.grounded = true;
+            } 
+            // Hitting head
+            else if (prevY >= entity.pos.y + entity.size.y) {
+              player.pos.y = entity.pos.y + entity.size.y;
+              player.vel.y = 0;
+            }
+            // Side collisions
+            else {
+                const prevX = player.pos.x - player.vel.x;
+                if (prevX + player.size.x <= entity.pos.x) {
+                    player.pos.x = entity.pos.x - player.size.x;
+                    player.vel.x = 0;
+                } else if (prevX >= entity.pos.x + entity.size.x) {
+                    player.pos.x = entity.pos.x + entity.size.x;
+                    player.vel.x = 0;
+                }
+            }
+          }
+        } else if (entity.type === EntityType.ITEM_TACO) {
+             if (checkCollision(player, entity)) {
+                 gameState.current.levelComplete = true;
+                 createConfetti(player.pos);
+             }
+        } else if (entity.type === EntityType.POWERUP_SAUCE) {
+            if (checkCollision(player, entity)) {
+                setHasSauce(true);
+                gameState.current.hasSauce = true;
+                // Remove sauce
+                gameState.current.entities = gameState.current.entities.filter(e => e !== entity);
+                createParticles(entity.pos, 10, 'red');
+            }
         }
+        // Enemy Collision
+        else if ([EntityType.ENEMY_ONION, EntityType.ENEMY_CILANTRO, EntityType.ENEMY_SALT, EntityType.ENEMY_BOSS].includes(entity.type)) {
+            if (checkCollision(player, entity)) {
+                // Mario-style stomp
+                const hitFromAbove = (player.pos.y + player.size.y) - player.vel.y <= entity.pos.y + (entity.size.y * 0.5);
+                
+                if (hitFromAbove && player.vel.y > 0 && entity.type !== EntityType.ENEMY_CILANTRO) {
+                    player.vel.y = -10; // Bounce
+                    createParticles(entity.pos, 8, entity.color);
+                    
+                    if (entity.type === EntityType.ENEMY_BOSS) {
+                        entity.health = (entity.health || 1) - 1;
+                        if (entity.health <= 0) {
+                            gameState.current.bossDefeated = true;
+                            gameState.current.entities = gameState.current.entities.filter(e => e !== entity);
+                            // Spawn Taco
+                            gameState.current.entities.push({
+                                id: `taco-win`, type: EntityType.ITEM_TACO, 
+                                pos: { ...entity.pos }, size: { x: TILE_SIZE, y: TILE_SIZE },
+                                vel: { x: 0, y: 0 }, color: 'yellow', emoji: EMOJIS.taco
+                            });
+                        }
+                    } else {
+                        gameState.current.entities = gameState.current.entities.filter(e => e !== entity);
+                        gameState.current.score += 100;
+                        setScore(gameState.current.score);
+                    }
+                } else {
+                    // Hurt
+                    onGameOver(`Touched by ${entity.type.replace('ENEMY_', '')}`);
+                }
+            }
+        }
+      });
 
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = 'black';
+      // --- Entity Logic (Enemies, Projectiles) ---
+      gameState.current.entities.forEach(entity => {
+          // Projectiles
+          if (entity.type === EntityType.PROJECTILE) {
+              entity.pos.x += entity.vel.x;
+              if (entity.lifetime) entity.lifetime--;
+              
+              // Hit enemies
+              gameState.current.entities.forEach(target => {
+                  if ([EntityType.ENEMY_ONION, EntityType.ENEMY_CILANTRO, EntityType.ENEMY_SALT, EntityType.ENEMY_BOSS].includes(target.type)) {
+                      if (checkCollision(entity, target)) {
+                          entity.lifetime = 0; // Kill projectile
+                          
+                          if (target.type === EntityType.ENEMY_BOSS) {
+                              target.health = (target.health || 1) - 1;
+                              createParticles(target.pos, 5, 'purple');
+                               if (target.health <= 0) {
+                                    gameState.current.bossDefeated = true;
+                                    gameState.current.entities = gameState.current.entities.filter(e => e !== target);
+                                    gameState.current.entities.push({
+                                        id: `taco-win`, type: EntityType.ITEM_TACO, 
+                                        pos: { ...target.pos }, size: { x: TILE_SIZE, y: TILE_SIZE },
+                                        vel: { x: 0, y: 0 }, color: 'yellow', emoji: EMOJIS.taco
+                                    });
+                               }
+                          } else {
+                              gameState.current.entities = gameState.current.entities.filter(e => e !== target);
+                              createParticles(target.pos, 10, target.color);
+                              gameState.current.score += 100;
+                              setScore(gameState.current.score);
+                          }
+                      }
+                  }
+              });
+          }
 
-        // Draw Left Leg
-        ctx.beginPath();
-        ctx.moveTo(-5, 10); // Hip offset
-        ctx.lineTo(-5 + Math.sin(leftLegAngle) * legLength, 10 + Math.cos(leftLegAngle) * legLength);
-        ctx.stroke();
+          // Boss AI
+          if (entity.type === EntityType.ENEMY_BOSS) {
+              // Move towards player slowly
+              const dx = player.pos.x - entity.pos.x;
+              entity.vel.x = dx > 0 ? 1.5 : -1.5;
+              entity.pos.x += entity.vel.x;
+          }
 
-        // Draw Right Leg
-        ctx.beginPath();
-        ctx.moveTo(5, 10);
-        ctx.lineTo(5 + Math.sin(rightLegAngle) * legLength, 10 + Math.cos(rightLegAngle) * legLength);
-        ctx.stroke();
+          // Simple Patrol AI for others
+          if (entity.type === EntityType.ENEMY_ONION) {
+              entity.pos.x += entity.vel.x;
+              // Turn around at simple boundaries or timers
+              if (Math.random() < 0.02) entity.vel.x *= -1;
+          }
+      });
+
+      // Cleanup dead particles/projectiles
+      gameState.current.entities = gameState.current.entities.filter(e => (e.type !== EntityType.PROJECTILE) || (e.lifetime || 0) > 0);
+      gameState.current.particles.forEach(p => {
+          p.pos.x += p.vel.x;
+          p.pos.y += p.vel.y;
+          p.vel.y += 0.2; // Gravity for particles
+          if (p.lifetime) p.lifetime--;
+      });
+      gameState.current.particles = gameState.current.particles.filter(p => (p.lifetime || 0) > 0);
+
+
+      // --- Camera ---
+      const screenWidth = canvas.width / scale;
+      const screenHeight = canvas.height / scale;
+      
+      let camX = -player.pos.x + screenWidth * 0.3;
+      let camY = -player.pos.y + screenHeight * 0.6;
+
+      // Clamp Camera
+      const levelWidth = LEVELS[0][0].length * TILE_SIZE;
+      const levelHeight = LEVELS[0].length * TILE_SIZE;
+      
+      camX = Math.min(0, Math.max(camX, -(levelWidth - screenWidth)));
+      
+      if (levelHeight < screenHeight) {
+           camY = (screenHeight - levelHeight) / 2;
+      } else {
+           camY = Math.min(0, Math.max(camY, -(levelHeight - screenHeight)));
+      }
+
+      gameState.current.camera = { x: camX, y: camY };
+
+      draw(ctx, canvas);
+      animationFrameId = requestAnimationFrame(update);
+    };
+
+    const checkCollision = (r1: Entity, r2: Entity) => {
+        return (
+            r1.pos.x < r2.pos.x + r2.size.x &&
+            r1.pos.x + r1.size.x > r2.pos.x &&
+            r1.pos.y < r2.pos.y + r2.size.y &&
+            r1.pos.y + r1.size.y > r2.pos.y
+        );
+    };
+
+    const draw = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+        const { camera, player, entities, particles, skyColor, scale } = gameState.current;
         
-        // Draw Emoji Head/Body
-        ctx.font = `${player.size.x}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        // Slight bobbing
-        const bobY = isMoving && player.grounded ? Math.sin(frameCount * 0.5) * 2 : 0;
-        ctx.fillText(player.emoji || '👨‍🍳', 0, -5 + bobY);
-        
-        ctx.restore();
-    }
+        // Clear and Set Background
+        ctx.fillStyle = skyColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Particles
-    particles.forEach(p => {
-        if (p.emoji) {
-            ctx.font = `${p.size.x * 2}px Arial`;
-            ctx.fillText(p.emoji, p.pos.x, p.pos.y);
-        } else {
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.translate(camera.x, camera.y);
+
+        // Draw Entities
+        [...entities, player!].forEach(entity => {
+            if (!entity) return;
+            
+            // Special Drawing for Player (Legs!)
+            if (entity.type === EntityType.PLAYER) {
+                const isMoving = Math.abs(entity.vel.x) > 0.1;
+                const legOffset = isMoving ? Math.sin(gameState.current.frameCount * 0.5) * 5 : 0;
+
+                // Legs
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                // Left Leg
+                ctx.moveTo(entity.pos.x + 10, entity.pos.y + entity.size.y - 5);
+                ctx.lineTo(entity.pos.x + 10 - legOffset, entity.pos.y + entity.size.y + 5);
+                // Right Leg
+                ctx.moveTo(entity.pos.x + entity.size.x - 10, entity.pos.y + entity.size.y - 5);
+                ctx.lineTo(entity.pos.x + entity.size.x - 10 + legOffset, entity.pos.y + entity.size.y + 5);
+                ctx.stroke();
+
+                // Body
+                ctx.font = `${entity.size.x}px serif`;
+                ctx.textBaseline = 'top';
+                ctx.save();
+                // Flip if facing left
+                if (!entity.facingRight) {
+                    ctx.translate(entity.pos.x + entity.size.x, entity.pos.y);
+                    ctx.scale(-1, 1);
+                    ctx.fillText(entity.emoji || '?', 0, 0);
+                } else {
+                    ctx.fillText(entity.emoji || '?', entity.pos.x, entity.pos.y);
+                }
+                ctx.restore();
+
+            } else if (entity.type === EntityType.ENEMY_BOSS) {
+                 // Draw Boss + Health Bar
+                 ctx.font = `${entity.size.x}px serif`;
+                 ctx.textBaseline = 'top';
+                 ctx.fillText(entity.emoji || '?', entity.pos.x, entity.pos.y);
+                 
+                 // Health Bar
+                 ctx.fillStyle = 'red';
+                 ctx.fillRect(entity.pos.x, entity.pos.y - 20, entity.size.x, 10);
+                 ctx.fillStyle = 'green';
+                 const hpPct = (entity.health || 1) / (entity.maxHealth || 1);
+                 ctx.fillRect(entity.pos.x, entity.pos.y - 20, entity.size.x * hpPct, 10);
+
+            } else {
+                if (entity.emoji) {
+                    ctx.font = `${entity.size.x}px serif`;
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(entity.emoji, entity.pos.x, entity.pos.y);
+                } else {
+                    ctx.fillStyle = entity.color;
+                    ctx.fillRect(entity.pos.x, entity.pos.y, entity.size.x, entity.size.y);
+                }
+            }
+        });
+
+        // Draw Particles
+        particles.forEach(p => {
             ctx.fillStyle = p.color;
             ctx.fillRect(p.pos.x, p.pos.y, p.size.x, p.size.y);
+        });
+
+        ctx.restore();
+
+        // UI Overlays (Celebration)
+        if (gameState.current.levelComplete) {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(Math.sin(gameState.current.frameCount * 0.1) * 0.05);
+            ctx.scale(scale, scale);
+            
+            const isFinalLevel = gameState.current.levelIndex === LEVELS.length - 1;
+
+            if (isFinalLevel) {
+                // === RAMSEY CELEBRATION ===
+                
+                // Text at top
+                ctx.fillStyle = '#FFD700';
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.font = 'bold 50px Fredoka One';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText("THE SPECIAL ORDER IS COMPLETE!", 0, -140);
+                ctx.strokeText("THE SPECIAL ORDER IS COMPLETE!", 0, -140);
+                
+                ctx.font = 'bold 30px Roboto';
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Oh wait, you found the taco.", 0, -100);
+
+                // Draw Pixel Ramsey
+                const rX = -20; 
+                const rY = 20;
+                
+                ctx.save();
+                ctx.translate(rX, rY);
+                ctx.scale(3, 3); 
+                
+                // Hair
+                ctx.fillStyle = '#E4C988'; 
+                ctx.beginPath();
+                ctx.moveTo(-10, -15);
+                ctx.lineTo(10, -15);
+                ctx.lineTo(10, -18);
+                ctx.lineTo(0, -22);
+                ctx.lineTo(-10, -18);
+                ctx.fill();
+                
+                // Face
+                ctx.fillStyle = '#FFCCAA';
+                ctx.fillRect(-10, -15, 20, 20);
+                
+                // Eyes
+                ctx.fillStyle = '#444';
+                ctx.fillRect(-6, -8, 4, 2); 
+                ctx.fillRect(2, -8, 4, 2);
+                
+                // Mouth (Approving)
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-4, 0);
+                ctx.quadraticCurveTo(0, 3, 4, 0);
+                ctx.stroke();
+
+                // Chef Whites Body
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(-12, 5, 24, 25);
+                
+                // Arms Crossed
+                ctx.fillStyle = '#DDDDDD';
+                ctx.fillRect(-14, 8, 6, 15);
+                ctx.fillRect(8, 8, 6, 15);
+                ctx.fillRect(-10, 18, 20, 5);
+
+                ctx.restore();
+
+                // Speech Bubble
+                ctx.save();
+                ctx.translate(60, 0); 
+                ctx.fillStyle = 'white';
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.roundRect(10, -10, 180, 60, 10);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Tail
+                ctx.beginPath();
+                ctx.moveTo(10, 20);
+                ctx.lineTo(-15, 30);
+                ctx.lineTo(15, 40);
+                ctx.fill();
+
+                ctx.fillStyle = 'black';
+                ctx.font = 'bold 16px Roboto';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText("Finally,", 25, 10);
+                ctx.fillText("some good food.", 25, 30);
+
+                ctx.restore();
+
+            } else {
+                // === STANDARD CELEBRATION ===
+                ctx.fillStyle = '#FFD700';
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.font = 'bold 80px Fredoka One';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillText("DELICIOUS!", 0, 0);
+                ctx.strokeText("DELICIOUS!", 0, 0);
+                
+                ctx.font = 'bold 30px Roboto';
+                ctx.fillStyle = '#fff';
+                ctx.fillText("Next Course Coming Up...", 0, 50);
+            }
+            
+            ctx.restore();
         }
-    });
-
-    ctx.restore();
-
-  }, []);
-
-  useEffect(() => {
-    let animationFrameId: number;
-    const loop = () => {
-      update();
-      draw();
-      animationFrameId = requestAnimationFrame(loop);
     };
-    loop();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [update, draw]);
 
-  return <canvas ref={canvasRef} className="block w-full h-full" />;
+    const handleResize = () => {
+      if (canvasRef.current) {
+        canvasRef.current.width = window.innerWidth;
+        canvasRef.current.height = window.innerHeight;
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    
+    animationFrameId = requestAnimationFrame(update);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [onGameOver, onLevelComplete, setHasSauce, setScore]);
+
+  return <canvas ref={canvasRef} className="block" />;
 };
 
 export default GameCanvas;
