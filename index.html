@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>The Special Order</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
@@ -11,12 +11,21 @@
         font-family: 'Roboto', sans-serif;
         background-color: #1a1a1a;
         overflow: hidden; /* Prevent scrolling from game keys */
+        touch-action: none; /* Prevent touch gestures like pull-to-refresh */
+        -webkit-user-select: none; /* Safari */
+        user-select: none; /* Standard syntax */
       }
       h1, h2, h3, button {
         font-family: 'Fredoka One', cursive;
       }
       canvas {
         image-rendering: pixelated;
+      }
+      /* Disable selection for touch controls */
+      .no-select {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
       }
     </style>
 
@@ -31,7 +40,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/thespecialorder/assets/index-BvTml2V_.js"></script>
+  <script type="module" crossorigin src="/assets/index-BksqgjvA.js"></script>
 </head>
   <body>
     <div id="root"></div>
