@@ -105,6 +105,9 @@ const App: React.FC = () => {
   const retryLevel = () => {
     setStatus(GameStatus.PLAYING);
     setChefQuote("");
+    // Reset Powerups on retry so HUD matches Engine state
+    setHasSauce(false);
+    setHasCoffee(false);
   };
 
   const handleGameOver = (cause: string) => {
