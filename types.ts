@@ -3,7 +3,8 @@ export enum GameStatus {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
   GAME_OVER = 'GAME_OVER',
-  VICTORY = 'VICTORY'
+  VICTORY = 'VICTORY',
+  EDITOR = 'EDITOR'
 }
 
 export enum EntityType {
@@ -17,6 +18,7 @@ export enum EntityType {
   POWERUP_SAUCE = 'POWERUP_SAUCE',
   POWERUP_COFFEE = 'POWERUP_COFFEE',
   PROJECTILE = 'PROJECTILE',
+  ENEMY_PROJECTILE = 'ENEMY_PROJECTILE',
   PARTICLE = 'PARTICLE'
 }
 
@@ -40,6 +42,9 @@ export interface Entity {
   maxHealth?: number; // For health bars
   lifetime?: number; // For particles
   invulnerable?: number; // Frames of invulnerability
+  aiState?: string; // For complex AI behavior
+  aiTimer?: number;
+  variant?: string; // 'SMASH', 'FAST', 'RANGED', 'FINAL'
 }
 
 export interface LevelData {

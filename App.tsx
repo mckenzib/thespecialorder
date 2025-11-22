@@ -14,6 +14,12 @@ const App: React.FC = () => {
   const [deathCause, setDeathCause] = useState("");
   const [levelIndex, setLevelIndex] = useState(0);
   const [isTouch, setIsTouch] = useState(false);
+  
+  // Editor State
+  // Initialize with formatted string array
+  const [editorText, setEditorText] = useState(LEVELS[0].map(r => `"${r}"`).join(',\n'));
+  const [isTesting, setIsTesting] = useState(false);
+  const [customLevel, setCustomLevel] = useState<string[] | undefined>(undefined);
 
   // Detect Touch Device
   useEffect(() => {
@@ -30,6 +36,70 @@ const App: React.FC = () => {
     setHasCoffee(false);
     setLevelIndex(0); // Reset to level 1
     setChefQuote("");
+    setIsTesting(false);
+    setCustomLevel(undefined);
+  };
+
+  const startEditor = () => {
+      setStatus(GameStatus.EDITOR);
+      setIsTesting(false);
+  };
+
+  const loadLevelInEditor = (index: number) => {
+      if (LEVELS[index]) {
+          // Format as JS String Array: "string",
+          setEditorText(LEVELS[index].map(r => `"${r}"`).join(',\n'));
+      }
+  };
+
+  const testLevel = () => {
+      const lines = editorText.split('\n');
+      const parsedLevel: string[] = [];
+      let valid = true;
+
+      for (let line of lines) {
+          let trimmed = line.trim();
+          if (!trimmed) continue; // Skip empty lines
+          
+          // Remove trailing comma if present
+          if (trimmed.endsWith(',')) {
+              trimmed = trimmed.slice(0, -1).trim();
+          }
+
+          // Check if wrapped in quotes
+          const firstChar = trimmed.charAt(0);
+          const lastChar = trimmed.charAt(trimmed.length - 1);
+          
+          // Support both single and double quotes
+          if ((firstChar === '"' && lastChar === '"') || (firstChar === "'" && lastChar === "'")) {
+              // Extract content between quotes
+              parsedLevel.push(trimmed.slice(1, -1));
+          } else {
+              // If it's not a comment, it's invalid
+              if (!trimmed.startsWith('//')) {
+                  valid = false;
+                  break;
+              }
+          }
+      }
+
+      if (!valid || parsedLevel.length === 0) {
+          alert("Invalid Level Format!\n\nEnsure each row is a string enclosed in quotes.\n\nExample:\n\"   T   \",\n\"  ###  \"");
+          return;
+      }
+
+      setCustomLevel(parsedLevel);
+      setIsTesting(true);
+      setScore(0);
+      setHasSauce(false);
+      setHasCoffee(false);
+      setLevelIndex(0); // Default to first environment for testing
+      setStatus(GameStatus.PLAYING);
+  };
+
+  const stopTesting = () => {
+      setStatus(GameStatus.EDITOR);
+      setIsTesting(false);
   };
 
   const retryLevel = () => {
@@ -39,6 +109,7 @@ const App: React.FC = () => {
 
   const handleGameOver = (cause: string) => {
     if (status !== GameStatus.PLAYING) return;
+
     setStatus(GameStatus.GAME_OVER);
     setMessage("ORDER CANCELLED!");
     setDeathCause(cause);
@@ -53,6 +124,14 @@ const App: React.FC = () => {
     // Reset Powerups between levels
     setHasSauce(false);
     setHasCoffee(false);
+
+    if (isTesting) {
+        setStatus(GameStatus.VICTORY);
+        setMessage("TEST PASSED!");
+        const randomQuote = CHEF_QUOTES_VICTORY[Math.floor(Math.random() * CHEF_QUOTES_VICTORY.length)];
+        setChefQuote(randomQuote);
+        return;
+    }
 
     if (levelIndex < LEVELS.length - 1) {
         // Next Level
@@ -78,9 +157,22 @@ const App: React.FC = () => {
       {status === GameStatus.PLAYING && (
         <div className="absolute top-0 left-0 w-full p-2 md:p-4 flex justify-between items-start z-10 pointer-events-none">
           <div className="bg-black/50 text-white p-2 rounded-lg border-2 border-yellow-500 shadow-lg backdrop-blur-sm scale-90 origin-top-left md:scale-100">
-            <h3 className="text-lg md:text-xl text-yellow-400 font-bold">Score: {score}</h3>
-            <p className="text-xs md:text-sm text-gray-300">Level {levelIndex + 1} / {LEVELS.length}</p>
+            <h3 className="text-lg md:text-xl text-yellow-400 font-bold">{isTesting ? 'TEST MODE' : `Score: ${score}`}</h3>
+            {!isTesting && <p className="text-xs md:text-sm text-gray-300">Level {levelIndex + 1} / {LEVELS.length}</p>}
           </div>
+          
+          {/* Editor Button in HUD */}
+          {isTesting && (
+              <div className="pointer-events-auto">
+                  <button 
+                      onClick={stopTesting}
+                      className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded shadow-lg border-2 border-red-400"
+                  >
+                      🛑 EDIT
+                  </button>
+              </div>
+          )}
+
           <div className="flex gap-2">
              {hasCoffee && (
                  <div className="bg-amber-800/80 text-white p-2 rounded-lg border-2 border-amber-600 animate-pulse scale-90 origin-top-right md:scale-100">
@@ -102,6 +194,7 @@ const App: React.FC = () => {
       <GameCanvas 
         status={status} 
         levelIndex={levelIndex}
+        customLevel={customLevel}
         onGameOver={handleGameOver} 
         onLevelComplete={handleLevelComplete}
         setScore={setScore}
@@ -163,9 +256,68 @@ const App: React.FC = () => {
             </div>
         </div>
       )}
+      
+      {/* Editor Overlay */}
+      {status === GameStatus.EDITOR && (
+          <div className="absolute inset-0 bg-neutral-900 text-white flex flex-col p-4 z-50 overflow-hidden">
+              <div className="flex justify-between items-center mb-4">
+                  <h1 className="text-xl md:text-2xl font-bold text-yellow-400">LEVEL EDITOR</h1>
+                  <div className="flex gap-2">
+                      <select 
+                        className="bg-gray-700 text-white p-2 rounded text-sm"
+                        onChange={(e) => loadLevelInEditor(parseInt(e.target.value))}
+                        defaultValue=""
+                      >
+                          <option value="" disabled>Load Template...</option>
+                          {LEVELS.map((_, i) => <option key={i} value={i}>Level {i + 1}</option>)}
+                      </select>
+                      <button onClick={testLevel} className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded font-bold text-sm">
+                          TEST LEVEL
+                      </button>
+                      <button onClick={() => setStatus(GameStatus.MENU)} className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded font-bold text-sm">
+                          EXIT
+                      </button>
+                  </div>
+              </div>
+              <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden">
+                  <textarea 
+                    className="flex-1 bg-black font-mono text-xs md:text-sm p-4 text-green-400 border border-gray-700 rounded resize-none focus:outline-none focus:border-yellow-500 whitespace-pre overflow-auto"
+                    value={editorText}
+                    onChange={(e) => setEditorText(e.target.value)}
+                    spellCheck={false}
+                  />
+                  <div className="md:w-64 bg-gray-800 p-4 rounded overflow-y-auto text-xs text-gray-300">
+                      <h3 className="font-bold text-white mb-2">LEGEND</h3>
+                      <ul className="space-y-1">
+                          <li><span className="text-yellow-500 font-mono">#</span> Platform</li>
+                          <li><span className="text-white font-mono">S</span> Start Position</li>
+                          <li><span className="text-yellow-400 font-mono">T</span> Taco (Goal)</li>
+                          <li><span className="text-purple-400 font-mono">O</span> Onion Enemy</li>
+                          <li><span className="text-green-400 font-mono">C</span> Cilantro Enemy</li>
+                          <li><span className="text-white font-mono">A</span> Salt Enemy</li>
+                          <li><span className="text-red-500 font-mono">B</span> Smash Boss</li>
+                          <li><span className="text-orange-500 font-mono">F</span> Fast Boss</li>
+                          <li><span className="text-green-500 font-mono">R</span> Ranged Boss</li>
+                          <li><span className="text-red-600 font-mono">X</span> Final Boss</li>
+                          <li><span className="text-red-400 font-mono">H</span> Hot Sauce (Shoot)</li>
+                          <li><span className="text-amber-600 font-mono">E</span> Espresso (Run)</li>
+                          <li><span className="text-gray-500 font-mono">space</span> Empty Air</li>
+                      </ul>
+                      <p className="mt-4 text-gray-400 italic">
+                          Format: Comma-separated strings enclosed in double quotes.
+                          <br/><br/>
+                          Example:<br/>
+                          "   T   ",<br/>
+                          "  ###  ",<br/>
+                          "S      "
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Menu / Game Over Overlay */}
-      {status !== GameStatus.PLAYING && (
+      {status !== GameStatus.PLAYING && status !== GameStatus.EDITOR && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20 backdrop-blur-sm p-4">
           <div className="max-w-md w-full bg-white rounded-xl shadow-2xl overflow-hidden transform transition-all scale-100 border-4 border-yellow-500">
             
@@ -201,12 +353,20 @@ const App: React.FC = () => {
 
               <div className="space-y-3">
                   {status === GameStatus.MENU ? (
-                    <button 
-                        onClick={startGame}
-                        className="w-full py-3 md:py-4 px-6 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-lg md:text-xl rounded-lg shadow-lg active:scale-95 transition-transform"
-                    >
-                        START ORDER
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        <button 
+                            onClick={startGame}
+                            className="w-full py-3 md:py-4 px-6 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-lg md:text-xl rounded-lg shadow-lg active:scale-95 transition-transform"
+                        >
+                            START ORDER
+                        </button>
+                        <button 
+                            onClick={startEditor}
+                            className="w-full py-2 px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold text-sm rounded-lg shadow-lg active:scale-95 transition-transform"
+                        >
+                            LEVEL EDITOR
+                        </button>
+                    </div>
                   ) : (
                     <div className="flex gap-2">
                         <button 
@@ -216,10 +376,10 @@ const App: React.FC = () => {
                             RETRY
                         </button>
                         <button 
-                            onClick={startGame}
+                            onClick={isTesting ? stopTesting : startGame}
                             className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white font-bold text-sm md:text-base rounded-lg shadow-md active:scale-95 transition-transform"
                         >
-                            RESTART
+                            {isTesting ? "EDIT LEVEL" : "RESTART"}
                         </button>
                     </div>
                   )}
