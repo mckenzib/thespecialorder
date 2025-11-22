@@ -8,18 +8,18 @@ export class LevelManager {
     const entities: Entity[] = [];
     let player: Entity | null = null;
     const currentIndex = state.levelIndex;
-    
+
     const currentLevelLayout = customLevel || LEVELS[currentIndex] || LEVELS[0];
 
     // Dynamic Sky Color
-    const skyColors = ['#87CEEB', '#FFDAB9', '#2F4F4F', '#300000']; 
+    const skyColors = ['#87CEEB', '#FFDAB9', '#2F4F4F', '#300000'];
     state.skyColor = skyColors[Math.floor(currentIndex / 4) % skyColors.length];
 
     state.bossDefeated = false;
     state.levelComplete = false;
     state.levelCompleteTimer = 0;
     state.levelTransitionTriggered = false;
-    
+
     // Reset Powerups handled by Engine caller, but ensure internal state matches
     state.hasSauce = false;
     state.hasCoffee = false;
@@ -56,36 +56,75 @@ export class LevelManager {
             id: `salt-${id}`, type: EntityType.ENEMY_SALT, pos, size: { x: TILE_SIZE * 0.7, y: TILE_SIZE * 0.9 },
             vel: { x: 0, y: 0 }, color: 'white', emoji: EMOJIS.salt
           });
-        } else if (['B', 'F', 'R', 'X'].includes(char)) {
+        } else if (char === 'W') {
+          entities.push({
+            id: `walljump-${id}`, type: EntityType.POWERUP_WALLJUMP, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
+            vel: { x: 0, y: 0 }, color: 'green', emoji: EMOJIS.wallJump
+          });
+        } else if (char === '=') {
+          entities.push({
+            id, type: EntityType.PLATFORM_CLOUD, pos, size: { x: TILE_SIZE, y: TILE_SIZE / 2 }, // Half height visual
+            vel: { x: 0, y: 0 }, color: 'white', emoji: EMOJIS.cloud
+          });
+        } else if (char === '-') {
+          const moveRange = TILE_SIZE * 3;
+          // Random start position within range to desync
+          const offset = (Math.random() * moveRange * 2) - moveRange;
+          const dir = Math.random() > 0.5 ? 1 : -1;
+
+          entities.push({
+            id, type: EntityType.PLATFORM_MOVING,
+            pos: { x: pos.x + offset, y: pos.y },
+            size: { x: TILE_SIZE, y: TILE_SIZE / 2 },
+            vel: { x: 2 * dir, y: 0 }, color: 'gray', emoji: EMOJIS.movingPlat,
+            moveAxis: 'x', startPos: { ...pos }, moveRange: moveRange
+          });
+        } else if (char === '|') {
+          const moveRange = TILE_SIZE * 3;
+          const offset = (Math.random() * moveRange * 2) - moveRange;
+          const dir = Math.random() > 0.5 ? 1 : -1;
+
+          entities.push({
+            id, type: EntityType.PLATFORM_MOVING,
+            pos: { x: pos.x, y: pos.y + offset },
+            size: { x: TILE_SIZE, y: TILE_SIZE / 2 },
+            vel: { x: 0, y: 2 * dir }, color: 'gray', emoji: EMOJIS.movingPlatVertical,
+            moveAxis: 'y', startPos: { ...pos }, moveRange: moveRange
+          });
+        } else if (['B', 'F', 'R', 'X', 'D'].includes(char)) {
           let hp = BOSS_HEALTH_BASE * (Math.floor(currentIndex / 4) + 1);
           let variant = 'SMASH';
           let emoji = EMOJIS.boss;
           let color = 'purple';
-          let sizeMultiplier = 2; // Standardized smaller hitbox for all bosses
+          let sizeMultiplier = 2;
 
           if (char === 'F') {
-              variant = 'FAST';
-              emoji = EMOJIS.bossFast;
-              color = 'orange';
-              hp = Math.floor(hp * 0.8);
+            variant = 'FAST';
+            emoji = EMOJIS.bossFast;
+            color = 'orange';
+            hp = Math.floor(hp * 0.8);
           } else if (char === 'R') {
-              variant = 'RANGED';
-              emoji = EMOJIS.bossRanged;
-              color = 'green';
+            variant = 'RANGED';
+            emoji = EMOJIS.bossRanged;
+            color = 'green';
+          } else if (char === 'D') {
+            variant = 'BOUNCY';
+            emoji = EMOJIS.bossBouncy;
+            color = 'pink';
           } else if (char === 'X') {
-              variant = 'FINAL';
-              emoji = EMOJIS.finalBoss;
-              color = 'red';
-              hp += 10;
+            variant = 'FINAL';
+            emoji = EMOJIS.finalBoss;
+            color = 'red';
+            hp += 10;
           }
 
           entities.push({
-            id: `boss-${id}`, type: EntityType.ENEMY_BOSS, pos, 
+            id: `boss-${id}`, type: EntityType.ENEMY_BOSS, pos,
             size: { x: TILE_SIZE * sizeMultiplier, y: TILE_SIZE * sizeMultiplier },
-            vel: { x: 0, y: 0 }, 
-            color: color, 
-            emoji: emoji, 
-            health: hp, 
+            vel: { x: 0, y: 0 },
+            color: color,
+            emoji: emoji,
+            health: hp,
             maxHealth: hp,
             aiState: 'HOVER',
             aiTimer: 0,
@@ -105,11 +144,6 @@ export class LevelManager {
           entities.push({
             id: `coffee-${id}`, type: EntityType.POWERUP_COFFEE, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
             vel: { x: 0, y: 0 }, color: 'brown', emoji: EMOJIS.coffee
-          });
-        } else if (char === 'W') {
-          entities.push({
-            id: `walljump-${id}`, type: EntityType.POWERUP_WALLJUMP, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
-            vel: { x: 0, y: 0 }, color: 'green', emoji: EMOJIS.wallJump
           });
         }
       }

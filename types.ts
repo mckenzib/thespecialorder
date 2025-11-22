@@ -10,6 +10,8 @@ export enum GameStatus {
 export enum EntityType {
   PLAYER = 'PLAYER',
   PLATFORM = 'PLATFORM',
+  PLATFORM_CLOUD = 'PLATFORM_CLOUD',
+  PLATFORM_MOVING = 'PLATFORM_MOVING',
   ENEMY_ONION = 'ENEMY_ONION',
   ENEMY_CILANTRO = 'ENEMY_CILANTRO',
   ENEMY_SALT = 'ENEMY_SALT',
@@ -47,6 +49,11 @@ export interface Entity {
   aiState?: string; // For complex AI behavior
   aiTimer?: number;
   variant?: string; // 'SMASH', 'FAST', 'RANGED', 'FINAL'
+  // Moving Platform Props
+  moveAxis?: 'x' | 'y';
+  startPos?: Vector;
+  moveSpeed?: number;
+  moveRange?: number;
 }
 
 export interface LevelData {
