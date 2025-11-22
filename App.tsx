@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import GameCanvas from './components/GameCanvas';
 import { GameStatus } from './types';
@@ -7,6 +8,7 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<GameStatus>(GameStatus.MENU);
   const [score, setScore] = useState(0);
   const [hasSauce, setHasSauce] = useState(false);
+  const [hasCoffee, setHasCoffee] = useState(false);
   const [message, setMessage] = useState("");
   const [chefQuote, setChefQuote] = useState("Loading chef's opinion...");
   const [deathCause, setDeathCause] = useState("");
@@ -25,6 +27,7 @@ const App: React.FC = () => {
     setStatus(GameStatus.PLAYING);
     setScore(0);
     setHasSauce(false);
+    setHasCoffee(false);
     setLevelIndex(0); // Reset to level 1
     setChefQuote("");
   };
@@ -46,6 +49,10 @@ const App: React.FC = () => {
 
   const handleLevelComplete = () => {
     if (status !== GameStatus.PLAYING) return;
+
+    // Reset Powerups between levels
+    setHasSauce(false);
+    setHasCoffee(false);
 
     if (levelIndex < LEVELS.length - 1) {
         // Next Level
@@ -75,6 +82,12 @@ const App: React.FC = () => {
             <p className="text-xs md:text-sm text-gray-300">Level {levelIndex + 1} / {LEVELS.length}</p>
           </div>
           <div className="flex gap-2">
+             {hasCoffee && (
+                 <div className="bg-amber-800/80 text-white p-2 rounded-lg border-2 border-amber-600 animate-pulse scale-90 origin-top-right md:scale-100">
+                    <span className="text-lg md:text-2xl">☕ BOOST</span>
+                    <div className="text-[10px] md:text-xs font-bold text-center text-white/80">{isTouch ? '(Hold B)' : '(Hold Shift)'}</div>
+                 </div>
+             )}
              {hasSauce && (
                  <div className="bg-red-600/80 text-white p-2 rounded-lg border-2 border-red-400 animate-pulse scale-90 origin-top-right md:scale-100">
                     <span className="text-lg md:text-2xl">🌶️ SAUCE</span>
@@ -93,6 +106,7 @@ const App: React.FC = () => {
         onLevelComplete={handleLevelComplete}
         setScore={setScore}
         setHasSauce={setHasSauce}
+        setHasCoffee={setHasCoffee}
       />
 
       {/* Touch Controls Overlay */}
@@ -124,7 +138,7 @@ const App: React.FC = () => {
             <div className="flex gap-4 items-end pointer-events-auto pb-2">
                 {/* B Button (Run/Shoot) */}
                 <button 
-                    className="w-16 h-16 mb-4 bg-red-500/40 backdrop-blur-sm rounded-full border-2 border-red-400/60 active:bg-red-500/60 flex items-center justify-center text-xl font-bold text-white shadow-lg active:scale-95 transition-transform touch-none"
+                    className={`w-16 h-16 mb-4 backdrop-blur-sm rounded-full border-2 flex items-center justify-center text-xl font-bold text-white shadow-lg active:scale-95 transition-transform touch-none ${hasCoffee || hasSauce ? 'bg-red-500/60 border-red-400' : 'bg-gray-500/40 border-gray-400/60'}`}
                     onTouchStart={(e) => { 
                         e.preventDefault(); 
                         dispatchKey('ShiftLeft', 'keydown'); // Run
@@ -170,7 +184,7 @@ const App: React.FC = () => {
                 <div className="text-gray-600 mb-6 text-sm md:text-lg leading-relaxed">
                   <p>You are a chef in a dangerous kitchen.</p>
                   <p>Dodge the <span className="font-bold text-purple-600">Onions</span>.</p>
-                  <p>Fight the <span className="font-bold text-purple-900">Boss Onion</span>.</p>
+                  <p>Grab the <span className="font-bold text-amber-800">Coffee</span> to Sprint!</p>
                   <p>Get the <span className="font-bold text-yellow-600">Taco</span>!</p>
                   <p className="mt-2 text-xs text-gray-400">Controls: Arrows to Move/Jump. Shift to Run. X to Shoot.</p>
                 </div>

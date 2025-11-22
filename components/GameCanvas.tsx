@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Entity, EntityType, Vector, GameStatus } from '../types';
 import { 
-  GRAVITY, FRICTION, TILE_SIZE, EMOJIS, COLORS, TERMINAL_VELOCITY, LEVELS, BOSS_HEALTH,
+  GRAVITY, FRICTION, TILE_SIZE, EMOJIS, COLORS, TERMINAL_VELOCITY, LEVELS, BOSS_HEALTH_BASE,
   WALK_SPEED, WALK_MAX_SPEED, WALK_JUMP_FORCE,
   RUN_SPEED, RUN_MAX_SPEED, RUN_JUMP_FORCE
 } from '../constants';
@@ -14,9 +14,10 @@ interface GameCanvasProps {
   onLevelComplete: () => void;
   setScore: (score: number) => void;
   setHasSauce: (has: boolean) => void;
+  setHasCoffee: (has: boolean) => void;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver, onLevelComplete, setScore, setHasSauce }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Mutable game state
@@ -28,6 +29,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     keys: {} as Record<string, boolean>,
     score: 0,
     hasSauce: false,
+    hasCoffee: false,
     lastShotTime: 0,
     frameCount: 0,
     status: status,
@@ -60,11 +62,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
 
     // Dynamic Sky Color based on level
     const skyColors = ['#87CEEB', '#FFDAB9', '#2F4F4F', '#300000']; 
-    gameState.current.skyColor = skyColors[currentIndex % skyColors.length];
+    // Rotate sky colors every 4 levels (per world)
+    gameState.current.skyColor = skyColors[Math.floor(currentIndex / 4) % skyColors.length];
 
     gameState.current.bossDefeated = false;
     gameState.current.levelComplete = false;
     gameState.current.levelCompleteTimer = 0;
+    
+    // RESET POWERUPS ON LEVEL START
+    gameState.current.hasSauce = false;
+    setHasSauce(false);
+    gameState.current.hasCoffee = false;
+    setHasCoffee(false);
 
     currentLevelLayout.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
@@ -98,9 +107,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
             vel: { x: 0, y: 0 }, color: 'white', emoji: EMOJIS.salt
           });
         } else if (char === 'B') {
+          let hp = BOSS_HEALTH_BASE * (Math.floor(currentIndex / 4) + 1);
+          if (currentIndex === LEVELS.length - 1) hp += 5; 
+
+          const isFinalBoss = currentIndex === LEVELS.length - 1;
+
           entities.push({
             id: `boss-${id}`, type: EntityType.ENEMY_BOSS, pos, size: { x: TILE_SIZE * 3, y: TILE_SIZE * 3 },
-            vel: { x: -2, y: 0 }, color: 'purple', emoji: EMOJIS.onion, health: BOSS_HEALTH, maxHealth: BOSS_HEALTH
+            vel: { x: -2, y: 0 }, 
+            color: 'purple', 
+            emoji: isFinalBoss ? EMOJIS.finalBoss : EMOJIS.boss, 
+            health: hp, 
+            maxHealth: hp
           });
         } else if (char === 'T') {
           entities.push({
@@ -112,16 +130,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
             id: `sauce-${id}`, type: EntityType.POWERUP_SAUCE, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
             vel: { x: 0, y: 0 }, color: 'red', emoji: EMOJIS.sauce
           });
+        } else if (char === 'E') {
+          entities.push({
+            id: `coffee-${id}`, type: EntityType.POWERUP_COFFEE, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
+            vel: { x: 0, y: 0 }, color: 'brown', emoji: EMOJIS.coffee
+          });
         }
       }
     });
 
-    // Reset score only on first level start
     if (currentIndex === 0 && status === GameStatus.PLAYING) {
        gameState.current.score = 0;
-       gameState.current.hasSauce = false;
        setScore(0);
-       setHasSauce(false);
     }
 
     gameState.current.player = player;
@@ -137,7 +157,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
       
       if (gameState.current.levelComplete) return;
 
-      const isRunning = gameState.current.keys['ShiftLeft'] || gameState.current.keys['ShiftRight'] || gameState.current.keys['KeyZ'];
+      const hasSpeedBoost = gameState.current.hasCoffee;
+      const isShiftHeld = gameState.current.keys['ShiftLeft'] || gameState.current.keys['ShiftRight'] || gameState.current.keys['KeyZ'];
+      const isRunning = hasSpeedBoost && isShiftHeld;
 
       // Jump logic
       if ((e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && gameState.current.player?.grounded && gameState.current.status === GameStatus.PLAYING) {
@@ -227,16 +249,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     const update = () => {
       if (gameState.current.status !== GameStatus.PLAYING) return;
       
-      // --- Scaling Logic ---
-      const visibleTilesHeight = 16; // Aim to show 16 tiles vertically
+      // Scaling Logic
+      const visibleTilesHeight = 16; 
       const scale = window.innerHeight / (visibleTilesHeight * TILE_SIZE);
       gameState.current.scale = scale;
 
-      // --- Level Complete Celebration Logic ---
+      // Level Complete Logic
       if (gameState.current.levelComplete) {
           gameState.current.levelCompleteTimer++;
-          
-          // Victory Hop
           const { player } = gameState.current;
           if (player && player.grounded && gameState.current.levelCompleteTimer % 40 === 0) {
                player.vel.y = -10;
@@ -248,18 +268,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
              // Simple floor collision for victory hop
              gameState.current.entities.forEach(entity => {
                  if (entity.type === EntityType.PLATFORM && 
-                     player.pos.x < entity.pos.x + entity.size.x &&
-                     player.pos.x + player.size.x > entity.pos.x &&
-                     player.pos.y + player.size.y <= entity.pos.y + entity.vel.y + 5 && // Tolerance
-                     player.pos.y + player.size.y + player.vel.y >= entity.pos.y) {
-                     player.vel.y = 0;
-                     player.pos.y = entity.pos.y - player.size.y;
-                     player.grounded = true;
+                     checkCollision(player, entity)) {
+                     const vectorY = (player.pos.y + player.size.y/2) - (entity.pos.y + entity.size.y/2);
+                     if (vectorY < 0) {
+                        player.vel.y = 0;
+                        player.pos.y = entity.pos.y - player.size.y;
+                        player.grounded = true;
+                     }
                  }
              });
           }
 
-          // Update particles
           gameState.current.particles.forEach(p => {
               p.pos.x += p.vel.x;
               p.pos.y += p.vel.y;
@@ -268,7 +287,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
           });
           gameState.current.particles = gameState.current.particles.filter(p => (p.lifetime || 0) > 0);
 
-          // Longer celebration for boss level (5s) vs normal level (2s)
           const isFinalLevel = gameState.current.levelIndex === LEVELS.length - 1;
           const maxTime = isFinalLevel ? 300 : 120;
 
@@ -286,8 +304,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
 
       gameState.current.frameCount++;
 
-      // --- Player Movement ---
-      const isRunning = gameState.current.keys['ShiftLeft'] || gameState.current.keys['ShiftRight'] || gameState.current.keys['KeyZ'];
+      // Movement
+      const hasSpeedBoost = gameState.current.hasCoffee;
+      const isShiftHeld = gameState.current.keys['ShiftLeft'] || gameState.current.keys['ShiftRight'] || gameState.current.keys['KeyZ'];
+      const isRunning = hasSpeedBoost && isShiftHeld;
+
       const acceleration = isRunning ? RUN_SPEED : WALK_SPEED;
       const maxSpeed = isRunning ? RUN_MAX_SPEED : WALK_MAX_SPEED;
 
@@ -309,50 +330,52 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
       player.pos.x += player.vel.x;
       player.pos.y += player.vel.y;
       
-      // Check abyss
+      // Abyss Check
       if (player.pos.y > (LEVELS[0].length + 5) * TILE_SIZE) {
           onGameOver("Falling into the abyss");
           return;
       }
 
-      // --- Collision Detection ---
+      // --- SOLID COLLISION DETECTION ---
       player.grounded = false;
 
-      // Platform Collision
       gameState.current.entities.forEach(entity => {
         if (entity.type === EntityType.PLATFORM) {
-          // AABB Collision
-          if (
-            player.pos.x < entity.pos.x + entity.size.x &&
-            player.pos.x + player.size.x > entity.pos.x &&
-            player.pos.y < entity.pos.y + entity.size.y &&
-            player.pos.y + player.size.y > entity.pos.y
-          ) {
-            // Simple resolution: push out based on velocity
-            const prevY = player.pos.y - player.vel.y;
-            
-            // Landing on top
-            if (prevY + player.size.y <= entity.pos.y) {
-              player.pos.y = entity.pos.y - player.size.y;
-              player.vel.y = 0;
-              player.grounded = true;
-            } 
-            // Hitting head
-            else if (prevY >= entity.pos.y + entity.size.y) {
-              player.pos.y = entity.pos.y + entity.size.y;
-              player.vel.y = 0;
-            }
-            // Side collisions
-            else {
-                const prevX = player.pos.x - player.vel.x;
-                if (prevX + player.size.x <= entity.pos.x) {
-                    player.pos.x = entity.pos.x - player.size.x;
-                    player.vel.x = 0;
-                } else if (prevX >= entity.pos.x + entity.size.x) {
-                    player.pos.x = entity.pos.x + entity.size.x;
-                    player.vel.x = 0;
-                }
-            }
+          if (checkCollision(player, entity)) {
+              // Resolve Collision (Solid Box)
+              const vectorX = (player.pos.x + player.size.x/2) - (entity.pos.x + entity.size.x/2);
+              const vectorY = (player.pos.y + player.size.y/2) - (entity.pos.y + entity.size.y/2);
+              
+              const halfWidths = (player.size.x + entity.size.x) / 2;
+              const halfHeights = (player.size.y + entity.size.y) / 2;
+              
+              const colX = halfWidths - Math.abs(vectorX);
+              const colY = halfHeights - Math.abs(vectorY);
+              
+              if (colX >= colY) {
+                  // Vertical collision
+                  if (vectorY > 0) {
+                      // Hitting bottom (Head bonk)
+                      player.pos.y += colY;
+                      player.vel.y = 0;
+                  } else {
+                      // Hitting top (Landing)
+                      player.pos.y -= colY;
+                      player.vel.y = 0;
+                      player.grounded = true;
+                  }
+              } else {
+                  // Horizontal collision
+                  if (vectorX > 0) {
+                      // Hitting right side
+                      player.pos.x += colX;
+                      player.vel.x = 0;
+                  } else {
+                      // Hitting left side
+                      player.pos.x -= colX;
+                      player.vel.x = 0;
+                  }
+              }
           }
         } else if (entity.type === EntityType.ITEM_TACO) {
              if (checkCollision(player, entity)) {
@@ -363,15 +386,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
             if (checkCollision(player, entity)) {
                 setHasSauce(true);
                 gameState.current.hasSauce = true;
-                // Remove sauce
                 gameState.current.entities = gameState.current.entities.filter(e => e !== entity);
                 createParticles(entity.pos, 10, 'red');
+            }
+        } else if (entity.type === EntityType.POWERUP_COFFEE) {
+            if (checkCollision(player, entity)) {
+                setHasCoffee(true);
+                gameState.current.hasCoffee = true;
+                gameState.current.entities = gameState.current.entities.filter(e => e !== entity);
+                createParticles(entity.pos, 10, '#6F4E37'); // Coffee color
             }
         }
         // Enemy Collision
         else if ([EntityType.ENEMY_ONION, EntityType.ENEMY_CILANTRO, EntityType.ENEMY_SALT, EntityType.ENEMY_BOSS].includes(entity.type)) {
             if (checkCollision(player, entity)) {
-                // Mario-style stomp
                 const hitFromAbove = (player.pos.y + player.size.y) - player.vel.y <= entity.pos.y + (entity.size.y * 0.5);
                 
                 if (hitFromAbove && player.vel.y > 0 && entity.type !== EntityType.ENEMY_CILANTRO) {
@@ -383,7 +411,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                         if (entity.health <= 0) {
                             gameState.current.bossDefeated = true;
                             gameState.current.entities = gameState.current.entities.filter(e => e !== entity);
-                            // Spawn Taco
                             gameState.current.entities.push({
                                 id: `taco-win`, type: EntityType.ITEM_TACO, 
                                 pos: { ...entity.pos }, size: { x: TILE_SIZE, y: TILE_SIZE },
@@ -396,25 +423,22 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                         setScore(gameState.current.score);
                     }
                 } else {
-                    // Hurt
                     onGameOver(`Touched by ${entity.type.replace('ENEMY_', '')}`);
                 }
             }
         }
       });
 
-      // --- Entity Logic (Enemies, Projectiles) ---
+      // Entity Logic
       gameState.current.entities.forEach(entity => {
-          // Projectiles
           if (entity.type === EntityType.PROJECTILE) {
               entity.pos.x += entity.vel.x;
               if (entity.lifetime) entity.lifetime--;
               
-              // Hit enemies
               gameState.current.entities.forEach(target => {
                   if ([EntityType.ENEMY_ONION, EntityType.ENEMY_CILANTRO, EntityType.ENEMY_SALT, EntityType.ENEMY_BOSS].includes(target.type)) {
                       if (checkCollision(entity, target)) {
-                          entity.lifetime = 0; // Kill projectile
+                          entity.lifetime = 0;
                           
                           if (target.type === EntityType.ENEMY_BOSS) {
                               target.health = (target.health || 1) - 1;
@@ -439,41 +463,36 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
               });
           }
 
-          // Boss AI
           if (entity.type === EntityType.ENEMY_BOSS) {
-              // Move towards player slowly
               const dx = player.pos.x - entity.pos.x;
-              entity.vel.x = dx > 0 ? 1.5 : -1.5;
+              const bossSpeed = 1.5 + (gameState.current.levelIndex * 0.1);
+              entity.vel.x = dx > 0 ? bossSpeed : -bossSpeed;
               entity.pos.x += entity.vel.x;
           }
 
-          // Simple Patrol AI for others
           if (entity.type === EntityType.ENEMY_ONION) {
               entity.pos.x += entity.vel.x;
-              // Turn around at simple boundaries or timers
               if (Math.random() < 0.02) entity.vel.x *= -1;
           }
       });
 
-      // Cleanup dead particles/projectiles
       gameState.current.entities = gameState.current.entities.filter(e => (e.type !== EntityType.PROJECTILE) || (e.lifetime || 0) > 0);
       gameState.current.particles.forEach(p => {
           p.pos.x += p.vel.x;
           p.pos.y += p.vel.y;
-          p.vel.y += 0.2; // Gravity for particles
+          p.vel.y += 0.2; 
           if (p.lifetime) p.lifetime--;
       });
       gameState.current.particles = gameState.current.particles.filter(p => (p.lifetime || 0) > 0);
 
 
-      // --- Camera ---
+      // Camera
       const screenWidth = canvas.width / scale;
       const screenHeight = canvas.height / scale;
       
       let camX = -player.pos.x + screenWidth * 0.3;
       let camY = -player.pos.y + screenHeight * 0.6;
 
-      // Clamp Camera
       const levelWidth = LEVELS[0][0].length * TILE_SIZE;
       const levelHeight = LEVELS[0].length * TILE_SIZE;
       
@@ -503,7 +522,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
     const draw = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
         const { camera, player, entities, particles, skyColor, scale } = gameState.current;
         
-        // Clear and Set Background
         ctx.fillStyle = skyColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -511,32 +529,25 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
         ctx.scale(scale, scale);
         ctx.translate(camera.x, camera.y);
 
-        // Draw Entities
         [...entities, player!].forEach(entity => {
             if (!entity) return;
             
-            // Special Drawing for Player (Legs!)
             if (entity.type === EntityType.PLAYER) {
                 const isMoving = Math.abs(entity.vel.x) > 0.1;
                 const legOffset = isMoving ? Math.sin(gameState.current.frameCount * 0.5) * 5 : 0;
 
-                // Legs
                 ctx.strokeStyle = 'black';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
-                // Left Leg
                 ctx.moveTo(entity.pos.x + 10, entity.pos.y + entity.size.y - 5);
                 ctx.lineTo(entity.pos.x + 10 - legOffset, entity.pos.y + entity.size.y + 5);
-                // Right Leg
                 ctx.moveTo(entity.pos.x + entity.size.x - 10, entity.pos.y + entity.size.y - 5);
                 ctx.lineTo(entity.pos.x + entity.size.x - 10 + legOffset, entity.pos.y + entity.size.y + 5);
                 ctx.stroke();
 
-                // Body
                 ctx.font = `${entity.size.x}px serif`;
                 ctx.textBaseline = 'top';
                 ctx.save();
-                // Flip if facing left
                 if (!entity.facingRight) {
                     ctx.translate(entity.pos.x + entity.size.x, entity.pos.y);
                     ctx.scale(-1, 1);
@@ -547,12 +558,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.restore();
 
             } else if (entity.type === EntityType.ENEMY_BOSS) {
-                 // Draw Boss + Health Bar
                  ctx.font = `${entity.size.x}px serif`;
                  ctx.textBaseline = 'top';
                  ctx.fillText(entity.emoji || '?', entity.pos.x, entity.pos.y);
                  
-                 // Health Bar
                  ctx.fillStyle = 'red';
                  ctx.fillRect(entity.pos.x, entity.pos.y - 20, entity.size.x, 10);
                  ctx.fillStyle = 'green';
@@ -571,7 +580,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
             }
         });
 
-        // Draw Particles
         particles.forEach(p => {
             ctx.fillStyle = p.color;
             ctx.fillRect(p.pos.x, p.pos.y, p.size.x, p.size.y);
@@ -579,7 +587,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
 
         ctx.restore();
 
-        // UI Overlays (Celebration)
         if (gameState.current.levelComplete) {
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -592,9 +599,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
             const isFinalLevel = gameState.current.levelIndex === LEVELS.length - 1;
 
             if (isFinalLevel) {
-                // === RAMSEY CELEBRATION ===
-                
-                // Text at top
                 ctx.fillStyle = '#FFD700';
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
@@ -608,7 +612,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.fillStyle = '#fff';
                 ctx.fillText("Oh wait, you found the taco.", 0, -100);
 
-                // Draw Pixel Ramsey
                 const rX = -20; 
                 const rY = 20;
                 
@@ -616,7 +619,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.translate(rX, rY);
                 ctx.scale(3, 3); 
                 
-                // Hair
                 ctx.fillStyle = '#E4C988'; 
                 ctx.beginPath();
                 ctx.moveTo(-10, -15);
@@ -626,16 +628,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.lineTo(-10, -18);
                 ctx.fill();
                 
-                // Face
                 ctx.fillStyle = '#FFCCAA';
                 ctx.fillRect(-10, -15, 20, 20);
                 
-                // Eyes
                 ctx.fillStyle = '#444';
                 ctx.fillRect(-6, -8, 4, 2); 
                 ctx.fillRect(2, -8, 4, 2);
                 
-                // Mouth (Approving)
                 ctx.strokeStyle = '#8B4513';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
@@ -643,11 +642,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.quadraticCurveTo(0, 3, 4, 0);
                 ctx.stroke();
 
-                // Chef Whites Body
                 ctx.fillStyle = '#FFFFFF';
                 ctx.fillRect(-12, 5, 24, 25);
                 
-                // Arms Crossed
                 ctx.fillStyle = '#DDDDDD';
                 ctx.fillRect(-14, 8, 6, 15);
                 ctx.fillRect(8, 8, 6, 15);
@@ -655,7 +652,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
 
                 ctx.restore();
 
-                // Speech Bubble
                 ctx.save();
                 ctx.translate(60, 0); 
                 ctx.fillStyle = 'white';
@@ -667,7 +663,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.fill();
                 ctx.stroke();
                 
-                // Tail
                 ctx.beginPath();
                 ctx.moveTo(10, 20);
                 ctx.lineTo(-15, 30);
@@ -684,7 +679,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
                 ctx.restore();
 
             } else {
-                // === STANDARD CELEBRATION ===
                 ctx.fillStyle = '#FFD700';
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
@@ -719,7 +713,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ status, levelIndex, onGameOver,
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, [onGameOver, onLevelComplete, setHasSauce, setScore]);
+  }, [onGameOver, onLevelComplete, setHasSauce, setHasCoffee, setScore]);
 
   return <canvas ref={canvasRef} className="block" />;
 };

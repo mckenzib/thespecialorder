@@ -1,3 +1,4 @@
+
 export enum GameStatus {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
@@ -14,6 +15,7 @@ export enum EntityType {
   ENEMY_BOSS = 'ENEMY_BOSS',
   ITEM_TACO = 'ITEM_TACO',
   POWERUP_SAUCE = 'POWERUP_SAUCE',
+  POWERUP_COFFEE = 'POWERUP_COFFEE',
   PROJECTILE = 'PROJECTILE',
   PARTICLE = 'PARTICLE'
 }
