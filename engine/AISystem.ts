@@ -59,6 +59,26 @@ export class AISystem {
       });
   }
 
+  private fireProjectile(state: GameState, boss: Entity, player: Entity, speed: number = 8) {
+       const bossCenterX = boss.pos.x + boss.size.x / 2;
+       const bossCenterY = boss.pos.y + boss.size.y / 2;
+       const playerCenterX = player.pos.x + player.size.x / 2;
+       const playerCenterY = player.pos.y + player.size.y / 2;
+
+       const angle = Math.atan2(playerCenterY - bossCenterY, playerCenterX - bossCenterX);
+       
+       state.entities.push({
+           id: `e-proj-${Date.now()}-${Math.random()}`,
+           type: EntityType.ENEMY_PROJECTILE,
+           pos: { x: bossCenterX - 7.5, y: bossCenterY - 7.5 }, // Center spawn
+           size: { x: 15, y: 15 },
+           vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+           color: 'orange',
+           emoji: EMOJIS.badFire,
+           lifetime: 120
+       });
+  }
+
   private updateBoss(entity: Entity, state: GameState) {
       const { player } = state;
       if (!player) return;
@@ -101,7 +121,7 @@ export class AISystem {
           }
       }
 
-      const BOSS_HOVER_HEIGHT = 250;
+      const BOSS_HOVER_HEIGHT = 200;
       const isFast = entity.variant === 'FAST' || entity.variant === 'FINAL';
       const isRanged = entity.variant === 'RANGED' || entity.variant === 'FINAL';
       const isSmash = entity.variant === 'SMASH' || entity.variant === 'FINAL';
@@ -112,23 +132,21 @@ export class AISystem {
       const playerCenterX = player.pos.x + player.size.x / 2;
       const playerCenterY = player.pos.y + player.size.y / 2;
 
-      // RANGED SHOOTING
+      // RANGED BEHAVIOR (Passive & Swoop Trigger)
       if (isRanged && entity.aiState === 'HOVER') {
-           // Shoot faster in phase 2
-           const rate = (entity.variant === 'FINAL' && isPhase2) ? 45 : 60;
+           // Passive Shooting (Slower rate)
+           const rate = (entity.variant === 'FINAL' && isPhase2) ? 45 : 90;
            if (entity.aiTimer! % 120 === rate) {
-               const angle = Math.atan2(playerCenterY - bossCenterY, playerCenterX - bossCenterX);
-               const speed = 8;
-               state.entities.push({
-                   id: `e-proj-${Date.now()}`,
-                   type: EntityType.ENEMY_PROJECTILE,
-                   pos: { x: bossCenterX - 7.5, y: bossCenterY - 7.5 }, // Center spawn
-                   size: { x: 15, y: 15 },
-                   vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
-                   color: 'orange',
-                   emoji: EMOJIS.badFire,
-                   lifetime: 120
-               });
+               this.fireProjectile(state, entity, player);
+           }
+
+           // TRIGGER SWOOP
+           const swoopChance = isPhase2 ? 0.02 : 0.01;
+           // Only swoop if not preparing another attack
+           if (entity.aiTimer! > 60 && Math.random() < swoopChance) {
+               entity.aiState = 'SWOOP_PREP';
+               entity.aiTimer = 0;
+               entity.vel.y = -4; // Hop up slightly to telegraph
            }
       }
 
@@ -154,7 +172,7 @@ export class AISystem {
           const targetY = Math.max(0, player.pos.y - BOSS_HOVER_HEIGHT);
           const dy = targetY - entity.pos.y;
           
-          // FIX: Dampen reaction to jumps so player can get an angle
+          // Dampen reaction to jumps so player can get an angle
           // If player is jumping (moving up), track slower
           let verticalFactor = 0.05;
           if (player.vel.y < -2) {
@@ -181,8 +199,38 @@ export class AISystem {
               entity.aiTimer = 0;
           }
       } 
-      
-      // SMASH
+      // SWOOP ATTACK (Ranged / Final)
+      else if (entity.aiState === 'SWOOP_PREP') {
+          entity.vel.x *= 0.9;
+          if (entity.aiTimer! > 20) {
+              entity.aiState = 'SWOOP';
+              entity.aiTimer = 0;
+          }
+      }
+      else if (entity.aiState === 'SWOOP') {
+          // Move towards player X loosely
+          const dx = playerCenterX - bossCenterX;
+          entity.vel.x += (dx > 0 ? 1 : -1) * 0.5;
+          entity.vel.x = Math.max(Math.min(entity.vel.x, 10), -10);
+
+          // Dive Down Low
+          const targetY = player.pos.y - 60;
+          const dy = targetY - entity.pos.y;
+          entity.vel.y = dy * 0.1; 
+
+          // Fire while swooping
+          if (entity.aiTimer! % 15 === 0) {
+               this.fireProjectile(state, entity, player, 9); // Fast projectiles
+          }
+
+          // Pull up and exit
+          if (entity.aiTimer! > 60) {
+              entity.aiState = 'RECOVER';
+              entity.aiTimer = 0;
+              entity.vel.y = -5; // Fly up
+          }
+      }
+      // SMASH ATTACK
       else if (entity.aiState === 'PREP') {
           entity.vel.x = 0;
           entity.vel.y = 0;
@@ -217,7 +265,7 @@ export class AISystem {
           }
       }
 
-      // DASH
+      // DASH ATTACK
       else if (entity.aiState === 'DASH_PREP') {
           entity.vel.x = 0;
           entity.vel.y = 0;
