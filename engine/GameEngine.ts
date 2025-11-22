@@ -1,6 +1,6 @@
 
 import { GameStatus, EntityType, Entity, Vector } from '../types';
-import { COLORS, TILE_SIZE, RUN_SPEED, WALK_SPEED, RUN_MAX_SPEED, WALK_MAX_SPEED, RUN_JUMP_FORCE, WALK_JUMP_FORCE, LEVELS, EMOJIS, GRAVITY } from '../constants';
+import { COLORS, TILE_SIZE, RUN_SPEED, WALK_SPEED, RUN_MAX_SPEED, WALK_MAX_SPEED, RUN_JUMP_FORCE, WALK_JUMP_FORCE, LEVELS, EMOJIS, GRAVITY, WALL_SLIDE_SPEED, WALL_JUMP_FORCE } from '../constants';
 import { GameState, EngineCallbacks } from './types';
 import { InputManager } from './InputManager';
 import { LevelManager } from './LevelManager';
@@ -36,6 +36,7 @@ export class GameEngine {
       levelStartScore: 0,
       hasSauce: false,
       hasCoffee: false,
+      hasWallJump: false,
       lastShotTime: 0,
       frameCount: 0,
       status: GameStatus.MENU,
@@ -187,11 +188,34 @@ export class GameEngine {
 
       player.vel.x = Math.max(Math.min(player.vel.x, maxSpeed), -maxSpeed);
 
+      // Wall Slide & Wall Jump
+      let isWallSliding = false;
+      if (this.state.hasWallJump && !player.grounded && player.wallDir !== 0 && player.vel.y > 0) {
+          isWallSliding = true;
+          // Apply wall friction
+          if (player.vel.y > WALL_SLIDE_SPEED) {
+              player.vel.y = WALL_SLIDE_SPEED;
+          }
+          // Create dust
+          if (this.state.frameCount % 5 === 0) {
+              this.physics.createParticles(this.state, 
+                  { x: player.wallDir === 1 ? player.pos.x + player.size.x : player.pos.x, y: player.pos.y + player.size.y }, 
+                  1, '#aaa');
+          }
+      }
+
       // Jump
-      if ((this.input.isDown('Space') || this.input.isDown('ArrowUp') || this.input.isDown('KeyW')) && player.grounded) {
-        player.vel.y = isRunning ? RUN_JUMP_FORCE : WALK_JUMP_FORCE;
-        player.grounded = false;
-        this.physics.createParticles(this.state, player.pos, 5, '#fff');
+      if (this.input.isDown('Space') || this.input.isDown('ArrowUp') || this.input.isDown('KeyW')) {
+          if (player.grounded) {
+              player.vel.y = isRunning ? RUN_JUMP_FORCE : WALK_JUMP_FORCE;
+              player.grounded = false;
+              this.physics.createParticles(this.state, player.pos, 5, '#fff');
+          } else if (isWallSliding) {
+              // Wall Jump
+              player.vel.y = WALL_JUMP_FORCE.y;
+              player.vel.x = -player.wallDir! * WALL_JUMP_FORCE.x;
+              this.physics.createParticles(this.state, player.pos, 8, '#fff');
+          }
       }
 
       // Shoot
@@ -260,6 +284,13 @@ export class GameEngine {
                   this.state.hasCoffee = true;
                   this.state.entities = this.state.entities.filter(e => e !== entity);
                   this.physics.createParticles(this.state, entity.pos, 10, '#6F4E37');
+              }
+          } else if (entity.type === EntityType.POWERUP_WALLJUMP) {
+              if (this.physics.checkCollision(player, entity)) {
+                  this.callbacks.setHasWallJump(true);
+                  this.state.hasWallJump = true;
+                  this.state.entities = this.state.entities.filter(e => e !== entity);
+                  this.physics.createParticles(this.state, entity.pos, 10, '#00FF00');
               }
           } else if (entity.type === EntityType.ENEMY_PROJECTILE) {
               if (this.physics.checkCollision(player, entity)) {

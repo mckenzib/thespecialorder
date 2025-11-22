@@ -17,6 +17,7 @@ export enum EntityType {
   ITEM_TACO = 'ITEM_TACO',
   POWERUP_SAUCE = 'POWERUP_SAUCE',
   POWERUP_COFFEE = 'POWERUP_COFFEE',
+  POWERUP_WALLJUMP = 'POWERUP_WALLJUMP',
   PROJECTILE = 'PROJECTILE',
   ENEMY_PROJECTILE = 'ENEMY_PROJECTILE',
   PARTICLE = 'PARTICLE'
@@ -38,6 +39,7 @@ export interface Entity {
   isDead?: boolean;
   grounded?: boolean;
   facingRight?: boolean;
+  wallDir?: number; // -1 (left wall), 1 (right wall), 0 (none)
   health?: number; // For bosses or robust enemies if needed
   maxHealth?: number; // For health bars
   lifetime?: number; // For particles

@@ -12,10 +12,11 @@ interface GameCanvasProps {
   setScore: (score: number) => void;
   setHasSauce: (has: boolean) => void;
   setHasCoffee: (has: boolean) => void;
+  setHasWallJump: (has: boolean) => void;
 }
 
 const GameCanvas: React.FC<GameCanvasProps> = ({ 
-  status, levelIndex, customLevel, onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee 
+  status, levelIndex, customLevel, onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee, setHasWallJump
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
@@ -23,12 +24,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   // Create a ref to hold the latest callbacks. 
   // This prevents stale closures where the Engine calls the initial 'onGameOver' 
   // which might have had a 'status !== PLAYING' check that fails.
-  const callbacksRef = useRef({ onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee });
+  const callbacksRef = useRef({ onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee, setHasWallJump });
 
   // Sync the ref on every render
   useEffect(() => {
-    callbacksRef.current = { onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee };
-  }, [onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee]);
+    callbacksRef.current = { onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee, setHasWallJump };
+  }, [onGameOver, onLevelComplete, setScore, setHasSauce, setHasCoffee, setHasWallJump]);
 
   // Initialize Engine
   useEffect(() => {
@@ -38,7 +39,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         onLevelComplete: () => callbacksRef.current.onLevelComplete(),
         setScore: (score) => callbacksRef.current.setScore(score),
         setHasSauce: (has) => callbacksRef.current.setHasSauce(has),
-        setHasCoffee: (has) => callbacksRef.current.setHasCoffee(has)
+        setHasCoffee: (has) => callbacksRef.current.setHasCoffee(has),
+        setHasWallJump: (has) => callbacksRef.current.setHasWallJump(has)
       }, levelIndex);
     }
 

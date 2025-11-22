@@ -10,6 +10,9 @@ export class PhysicsSystem {
 
     // --- PLAYER PHYSICS ---
     if (player) {
+        // Reset Wall State
+        player.wallDir = 0;
+
         player.vel.x *= FRICTION;
         player.vel.y += GRAVITY;
         player.vel.y = Math.min(player.vel.y, TERMINAL_VELOCITY);
@@ -89,13 +92,15 @@ export class PhysicsSystem {
       } else {
           // Horizontal collision
           if (vectorX > 0) {
-              // Hitting right side
+              // Hitting right side (Entity is to the right of platform, so touching Left Wall)
               entity.pos.x += colX;
               entity.vel.x = 0;
+              entity.wallDir = -1; // Wall is on left
           } else {
-              // Hitting left side
+              // Hitting left side (Entity is to the left of platform, so touching Right Wall)
               entity.pos.x -= colX;
               entity.vel.x = 0;
+              entity.wallDir = 1; // Wall is on right
           }
       }
   }

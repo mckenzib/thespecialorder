@@ -153,7 +153,19 @@ export class AISystem {
 
           const targetY = Math.max(0, player.pos.y - BOSS_HOVER_HEIGHT);
           const dy = targetY - entity.pos.y;
-          entity.vel.y = dy * 0.05;
+          
+          // FIX: Dampen reaction to jumps so player can get an angle
+          // If player is jumping (moving up), track slower
+          let verticalFactor = 0.05;
+          if (player.vel.y < -2) {
+              verticalFactor = 0.015;
+          }
+          
+          entity.vel.y = dy * verticalFactor;
+
+          // Clamp max vertical speed to prevent snapping
+          const MAX_V_SPEED = 6;
+          entity.vel.y = Math.max(Math.min(entity.vel.y, MAX_V_SPEED), -MAX_V_SPEED);
           
           if (entity.variant === 'FAST') {
               entity.vel.y += Math.sin(state.frameCount * 0.1) * 2;

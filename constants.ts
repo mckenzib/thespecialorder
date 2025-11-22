@@ -1,6 +1,4 @@
 
-
-
 export const GRAVITY = 0.6;
 export const FRICTION = 0.85;
 
@@ -12,6 +10,9 @@ export const WALK_JUMP_FORCE = -14;
 export const RUN_SPEED = 1.5; // Faster acceleration
 export const RUN_MAX_SPEED = 12;
 export const RUN_JUMP_FORCE = -18; // Higher jump when running
+
+export const WALL_SLIDE_SPEED = 4;
+export const WALL_JUMP_FORCE = { x: 10, y: -16 };
 
 export const TERMINAL_VELOCITY = 15;
 
@@ -37,6 +38,7 @@ export const EMOJIS = {
   taco: '🌮',
   sauce: '🌶️',
   coffee: '☕',
+  wallJump: '🧤',
   fire: '🔥',
   badFire: '🔴',
   explosion: '💥'
@@ -51,6 +53,7 @@ export const EMOJIS = {
 // A = Salt
 // H = Hot Sauce
 // E = Espresso (Run Powerup)
+// W = Wall Jump Gloves
 // B = Boss (Smash - Basic)
 // F = Boss (Fast - Dash)
 // R = Boss (Ranged - Shooter)
@@ -77,22 +80,22 @@ const LEVEL_1 = [
 ];
 
 const LEVEL_2 = [
-  "                                T                                   ",
-  "                               ###                                  ",
-  "                              #                                     ",
-  "                      A      #                                      ",
-  "                     ###    #                                       ",
-  "                    #      #                                        ",
-  "                   #      #     O                                   ",
-  "                  #      #     ###                                  ",
-  "          H      #      #                                           ",
-  "         ###    #      #                                            ",
-  "               #      #           E                                 ",
-  "              #      #   C       ###                                ",
-  "      #      #      #   ###                                         ",
-  "  S   #     #      #                                                ",
-  "##### #    #      #                                                 ",
-  "#######   #      ###################################################"
+"                                                                   T",
+"                                                                  ##",
+"                                                                 #  ",
+"      #                                                         #   ",
+"      #                                                        #    ",
+"      #                                                       #     ",
+"      #                                                      #      ",
+"      #                                                     #       ",
+"      #                                                    #        ",
+"      # ###                                               #         ",
+"      #            O                  A                  #          ",
+"      #           ###    ####  ###   ###                #           ",
+"      #                                                #            ",
+"  SW  #     E                                         #             ",
+"##### #    ###                                       #              ",
+"#######                                             ################"
 ];
 
 const LEVEL_3 = [
@@ -249,22 +252,22 @@ const LEVEL_10 = [
 ];
 
 const LEVEL_11 = [
-  "                                                                    ",
 "                                                                    ",
-"                                                                    ",
-"                                                        O           ",
-"                                                       ###          ",
-"                                            C                       ",
-"                                           ###                      ",
-"                                A                                   ",
-"                               ###                                  ",
-"                     O                                              ",
-"                    ###                                             ",
-"           C     ###                                                ",
-"          ###                                                       ",
-"  S      #            E                                             ",
-"#####   #            ##                                            T",
-"####### #                                                          #"
+"                                                       #            ",
+"                                                       #            ",
+"                                                       #   T        ",
+"                                                       #  ###       ",
+"                                            C          #            ",
+"                                           ###         #            ",
+"                                A                      #            ",
+"                               ###                     #            ",
+"                     O                                 #            ",
+"                    ###                                #            ",
+"           C     ###                                   #            ",
+"          ###   #                                      #            ",
+"  S      #     #      E           W                    #            ",
+"#####   #     #      ##          ###                   #            ",
+"####### #    #                                         #            "
 ];
 
 const LEVEL_12_BOSS = [
@@ -331,19 +334,19 @@ const LEVEL_15 = [
   "                                                                   T",
   "                                                                  ##",
   "                                                                 #  ",
-  "                                                          C        ",
-  "                                                         ###       ",
-  "                                                  O                ",
-  "                                                 ###               ",
-  "                                          A                        ",
-  "                                         ###                       ",
-  "                                  C                                ",
-  "                                 ###                               ",
-  "                          O                                        ",
-  "                         ###                                       ",
-  "                  A                                                ",
-  "  S              ###                                               ",
-  "#####     ###                                                       "
+  "                                                          C     #   ",
+  "                                                         ###   #    ",
+  "                                                  O           #     ",
+  "                                                 ###          #     ",
+  "                                          A                   #     ",
+  "                                         ###                  #     ",
+  "                                  C                           #     ",
+  "                                 ###                          #     ",
+  "                          O                                   #     ",
+  "                         ###                                  #     ",
+  "                  A                 W                         #     ",
+  "  S              ###               ###                        #     ",
+  "#####     ###                                                 #     "
 ];
 
 const LEVEL_16_FINAL_BOSS = [

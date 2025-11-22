@@ -9,6 +9,7 @@ const App: React.FC = () => {
   const [score, setScore] = useState(0);
   const [hasSauce, setHasSauce] = useState(false);
   const [hasCoffee, setHasCoffee] = useState(false);
+  const [hasWallJump, setHasWallJump] = useState(false);
   const [message, setMessage] = useState("");
   const [chefQuote, setChefQuote] = useState("Loading chef's opinion...");
   const [deathCause, setDeathCause] = useState("");
@@ -34,6 +35,7 @@ const App: React.FC = () => {
     setScore(0);
     setHasSauce(false);
     setHasCoffee(false);
+    setHasWallJump(false);
     setLevelIndex(0); // Reset to level 1
     setChefQuote("");
     setIsTesting(false);
@@ -93,6 +95,7 @@ const App: React.FC = () => {
       setScore(0);
       setHasSauce(false);
       setHasCoffee(false);
+      setHasWallJump(false);
       setLevelIndex(0); // Default to first environment for testing
       setStatus(GameStatus.PLAYING);
   };
@@ -108,6 +111,7 @@ const App: React.FC = () => {
     // Reset Powerups on retry so HUD matches Engine state
     setHasSauce(false);
     setHasCoffee(false);
+    setHasWallJump(false);
   };
 
   const handleGameOver = (cause: string) => {
@@ -127,6 +131,7 @@ const App: React.FC = () => {
     // Reset Powerups between levels
     setHasSauce(false);
     setHasCoffee(false);
+    setHasWallJump(false);
 
     if (isTesting) {
         setStatus(GameStatus.VICTORY);
@@ -177,6 +182,12 @@ const App: React.FC = () => {
           )}
 
           <div className="flex gap-2">
+             {hasWallJump && (
+                 <div className="bg-green-800/80 text-white p-2 rounded-lg border-2 border-green-600 animate-pulse scale-90 origin-top-right md:scale-100">
+                    <span className="text-lg md:text-2xl">🧤 GRIP</span>
+                    <div className="text-[10px] md:text-xs font-bold text-center text-white/80">(Wall Jump)</div>
+                 </div>
+             )}
              {hasCoffee && (
                  <div className="bg-amber-800/80 text-white p-2 rounded-lg border-2 border-amber-600 animate-pulse scale-90 origin-top-right md:scale-100">
                     <span className="text-lg md:text-2xl">☕ BOOST</span>
@@ -203,6 +214,7 @@ const App: React.FC = () => {
         setScore={setScore}
         setHasSauce={setHasSauce}
         setHasCoffee={setHasCoffee}
+        setHasWallJump={setHasWallJump}
       />
 
       {/* Touch Controls Overlay */}
@@ -304,6 +316,7 @@ const App: React.FC = () => {
                           <li><span className="text-red-600 font-mono">X</span> Final Boss</li>
                           <li><span className="text-red-400 font-mono">H</span> Hot Sauce (Shoot)</li>
                           <li><span className="text-amber-600 font-mono">E</span> Espresso (Run)</li>
+                          <li><span className="text-green-600 font-mono">W</span> Wall Jump Gloves</li>
                           <li><span className="text-gray-500 font-mono">space</span> Empty Air</li>
                       </ul>
                       <p className="mt-4 text-gray-400 italic">

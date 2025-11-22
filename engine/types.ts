@@ -10,6 +10,7 @@ export interface GameState {
   levelStartScore: number; // Snapshot of score at beginning of level
   hasSauce: boolean;
   hasCoffee: boolean;
+  hasWallJump: boolean;
   lastShotTime: number;
   frameCount: number;
   status: GameStatus;
@@ -30,4 +31,5 @@ export interface EngineCallbacks {
   setScore: (score: number) => void;
   setHasSauce: (has: boolean) => void;
   setHasCoffee: (has: boolean) => void;
+  setHasWallJump: (has: boolean) => void;
 }

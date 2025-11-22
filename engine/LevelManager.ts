@@ -23,6 +23,7 @@ export class LevelManager {
     // Reset Powerups handled by Engine caller, but ensure internal state matches
     state.hasSauce = false;
     state.hasCoffee = false;
+    state.hasWallJump = false;
 
     currentLevelLayout.forEach((row, y) => {
       for (let x = 0; x < row.length; x++) {
@@ -104,6 +105,11 @@ export class LevelManager {
           entities.push({
             id: `coffee-${id}`, type: EntityType.POWERUP_COFFEE, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
             vel: { x: 0, y: 0 }, color: 'brown', emoji: EMOJIS.coffee
+          });
+        } else if (char === 'W') {
+          entities.push({
+            id: `walljump-${id}`, type: EntityType.POWERUP_WALLJUMP, pos, size: { x: TILE_SIZE * 0.8, y: TILE_SIZE * 0.8 },
+            vel: { x: 0, y: 0 }, color: 'green', emoji: EMOJIS.wallJump
           });
         }
       }
