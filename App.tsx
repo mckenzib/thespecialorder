@@ -30,6 +30,22 @@ const App: React.FC = () => {
         setIsTouch(checkTouch());
     }, []);
 
+    // Keyboard Listener for Retry
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (status === GameStatus.GAME_OVER || status === GameStatus.VICTORY) {
+                // Prevent accidental retries if typing in editor (though status check handles that)
+                // Allow common keys: Enter, Space, R, or just any key that isn't a modifier
+                if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
+                    retryLevel();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [status]);
+
     const startGame = () => {
         setStatus(GameStatus.PLAYING);
         setScore(0);
